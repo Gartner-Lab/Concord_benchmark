@@ -1,0 +1,177 @@
+mkdir: cannot create directory '/tmp/lock-gpu2': File exists
+mkdir: cannot create directory '/tmp/lock-gpu1': File exists
+mkdir: cannot create directory '/tmp/lock-gpu0': File exists
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+Faiss assertion 'err == CUBLAS_STATUS_SUCCESS' failed in void faiss::gpu::runMatrixMult(faiss::gpu::Tensor<float, 2, true>&, bool, faiss::gpu::Tensor<T, 2, true>&, bool, faiss::gpu::Tensor<IndexType, 2, true>&, bool, float, float, cublasHandle_t, cudaStream_t) [with AT = float; BT = float; cublasHandle_t = cublasContext*; cudaStream_t = CUstream_st*] at /project/faiss/faiss/gpu/utils/MatrixMult-inl.cuh:265; details: cublas failed (13): (512, 50) x (172, 50)' = (512, 172) gemm params m 172 n 512 k 50 trA T trB N lda 50 ldb 50 ldc 172
+/var/spool/sge/wynton/qb3-atgpu36/job_scripts/3474769: line 20: 2171503 Aborted                 (core dumped) python Treg_test.py
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -d (--delete)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi group --host <IP/FQDN> -l -j 
+   dcgmi group --host <IP/FQDN> -c <groupName> --default
+        --defaultnvswitches 
+   dcgmi group --host <IP/FQDN> -c <groupName> -a <entityId> 
+   dcgmi group --host <IP/FQDN> -d <groupId> 
+   dcgmi group --host <IP/FQDN> -g <groupId> -i -j 
+   dcgmi group --host <IP/FQDN> -g <groupId> -a <entityId> 
+   dcgmi group --host <IP/FQDN> -g <groupId> -r <entityId> 
+
+
+For complete USAGE and HELP type: 
+   dcgmi group --help
+
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+Faiss assertion 'err == CUBLAS_STATUS_SUCCESS' failed in void faiss::gpu::runMatrixMult(faiss::gpu::Tensor<float, 2, true>&, bool, faiss::gpu::Tensor<T, 2, true>&, bool, faiss::gpu::Tensor<IndexType, 2, true>&, bool, float, float, cublasHandle_t, cudaStream_t) [with AT = float; BT = float; cublasHandle_t = cublasContext*; cudaStream_t = CUstream_st*] at /project/faiss/faiss/gpu/utils/MatrixMult-inl.cuh:265; details: cublas failed (13): (512, 50) x (172, 50)' = (512, 172) gemm params m 172 n 512 k 50 trA T trB N lda 50 ldb 50 ldc 172
+/var/spool/sge/wynton/qb3-atgpu21/job_scripts/3486220: line 20: 2768737 Aborted                 (core dumped) python Treg_test.py
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -g (--group)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -e -u <> -m <> 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -d 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -p <pid> -v 
+   dcgmi stats --host <IP/FQDN> -g <groupId> -s <job id> 
+   dcgmi stats --host <IP/FQDN> -x <job id> 
+   dcgmi stats --host <IP/FQDN> -j <job id> -v --host <IP/FQDN> -r <job id>
+        -v 
+   dcgmi stats --host <IP/FQDN> -a -v 
+
+
+For complete USAGE and HELP type: 
+   dcgmi stats --help
+
+PARSE ERROR: Argument: -d (--delete)
+             Couldn't read argument value from string 'for'
+
+Usage: 
+   dcgmi group --host <IP/FQDN> -l -j 
+   dcgmi group --host <IP/FQDN> -c <groupName> --default
+        --defaultnvswitches 
+   dcgmi group --host <IP/FQDN> -c <groupName> -a <entityId> 
+   dcgmi group --host <IP/FQDN> -d <groupId> 
+   dcgmi group --host <IP/FQDN> -g <groupId> -i -j 
+   dcgmi group --host <IP/FQDN> -g <groupId> -a <entityId> 
+   dcgmi group --host <IP/FQDN> -g <groupId> -r <entityId> 
+
+
+For complete USAGE and HELP type: 
+   dcgmi group --help
+

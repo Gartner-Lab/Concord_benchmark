@@ -1,0 +1,58 @@
+Import successful
+cpu
+Data loading successful
+Computing neighbors:   0%|          | 0/8 [00:00<?, ?it/s]Computing neighbors:  12%|█▎        | 1/8 [02:56<20:33, 176.27s/it]Computing neighbors:  25%|██▌       | 2/8 [05:46<17:14, 172.48s/it]Computing neighbors:  38%|███▊      | 3/8 [08:55<15:00, 180.17s/it]Computing neighbors:  50%|█████     | 4/8 [11:45<11:44, 176.01s/it]Computing neighbors:  62%|██████▎   | 5/8 [14:27<08:33, 171.16s/it]Computing neighbors:  75%|███████▌  | 6/8 [17:39<05:56, 178.12s/it]Computing neighbors:  88%|████████▊ | 7/8 [20:34<02:57, 177.13s/it]Computing neighbors: 100%|██████████| 8/8 [23:32<00:00, 177.51s/it]Computing neighbors: 100%|██████████| 8/8 [23:32<00:00, 176.58s/it]
+Embeddings:   0%|[32m          [0m| 0/8 [00:00<?, ?it/s]
+Metrics:   0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+Metrics:   0%|[34m          [0m| 0/10 [00:00<?, ?it/s, Bio conservation: isolated_labels][A
+Metrics:  10%|[34m█         [0m| 1/10 [2:39:43<23:57:28, 9583.20s/it, Bio conservation: isolated_labels][A
+Metrics:  10%|[34m█         [0m| 1/10 [2:39:43<23:57:28, 9583.20s/it, Bio conservation: nmi_ari_cluster_labels_kmeans][AEmbeddings:   0%|[32m          [0m| 0/8 [2:39:43<?, ?it/s]
+Traceback (most recent call last):
+  File "/wynton/group/gartner/Qin/Concord_benchmark/jobs/Concord_CBCE/cbce_scib.py", line 65, in <module>
+    bm.benchmark()
+  File "/wynton/home/gartner/zhuqin/.conda/envs/cellpath/lib/python3.9/site-packages/scib_metrics/benchmark/_core.py", line 221, in benchmark
+    metric_value = getattr(MetricAnnDataAPI, metric_name)(ad, metric_fn)
+  File "/wynton/home/gartner/zhuqin/.conda/envs/cellpath/lib/python3.9/site-packages/scib_metrics/benchmark/_core.py", line 86, in <lambda>
+    nmi_ari_cluster_labels_kmeans = lambda ad, fn: fn(ad.X, ad.obs[_LABELS])
+  File "/wynton/home/gartner/zhuqin/.conda/envs/cellpath/lib/python3.9/site-packages/scib_metrics/_nmi_ari.py", line 65, in nmi_ari_cluster_labels_kmeans
+    n_clusters = len(np.unique(labels))
+  File "/wynton/home/gartner/zhuqin/.conda/envs/cellpath/lib/python3.9/site-packages/numpy/lib/arraysetops.py", line 274, in unique
+    ret = _unique1d(ar, return_index, return_inverse, return_counts,
+  File "/wynton/home/gartner/zhuqin/.conda/envs/cellpath/lib/python3.9/site-packages/numpy/lib/arraysetops.py", line 336, in _unique1d
+    ar.sort()
+TypeError: '<' not supported between instances of 'float' and 'str'
+
+                                                                                                               [A==============================================================
+job_number:                 1287061
+exec_file:                  job_scripts/1287061
+submission_time:            Thu Dec 19 19:44:51 2024
+owner:                      zhuqin
+uid:                        63549
+group:                      gartner
+gid:                        60396
+sge_o_home:                 /wynton/home/gartner/zhuqin
+sge_o_log_name:             zhuqin
+sge_o_path:                 /wynton/home/gartner/zhuqin/tools/cellranger-7.2.0/:/wynton/home/gartner/zhuqin/.local/bin:/wynton/home/gartner/zhuqin/bin:/opt/sge/bin:/opt/sge/bin/lx-amd64:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+sge_o_shell:                /bin/bash
+sge_o_workdir:              /wynton/group/gartner/Qin/Concord_benchmark/jobs/Concord_CBCE
+sge_o_host:                 gpudev1
+account:                    sge
+cwd:                        /wynton/group/gartner/Qin/Concord_benchmark/jobs/Concord_CBCE
+merge:                      y
+hard resource_list:         mem_free=40G,scratch=10G,h_rt=43200
+mail_list:                  zhuqin@gpudev1.wynton.ucsf.edu
+notify:                     FALSE
+job_name:                   cbce_scib.sh
+jobshare:                   0
+hard_queue_list:            !*gpu.q
+restart:                    n
+shell_list:                 NONE:/bin/bash
+env_list:                   TERM=NONE
+script_file:                cbce_scib.sh
+parallel environment:  smp range: 4
+project:                    gartnerlab
+binding:                    NONE
+job_type:                   NONE
+usage         1:            cpu=32:30:29, mem=10867555.29102 GB s, io=11.38340 GB, vmem=65.941G, maxvmem=136.822G
+binding       1:            NONE
+scheduling info:            (Collecting of scheduler job information is turned off)

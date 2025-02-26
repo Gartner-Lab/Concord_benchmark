@@ -1,0 +1,7 @@
+Import successful
+cpu
+Data loading successful
+Computing neighbors:   0%|          | 0/8 [00:00<?, ?it/s]Computing neighbors:  12%|█▎        | 1/8 [02:25<16:55, 145.10s/it]Computing neighbors:  25%|██▌       | 2/8 [04:38<13:48, 138.15s/it]Computing neighbors:  38%|███▊      | 3/8 [07:07<11:55, 143.18s/it]Computing neighbors:  50%|█████     | 4/8 [09:21<09:17, 139.41s/it]Computing neighbors:  62%|██████▎   | 5/8 [11:29<06:46, 135.56s/it]Computing neighbors:  75%|███████▌  | 6/8 [13:52<04:36, 138.10s/it]Computing neighbors:  88%|████████▊ | 7/8 [16:09<02:17, 137.64s/it]Computing neighbors: 100%|██████████| 8/8 [18:26<00:00, 137.36s/it]Computing neighbors: 100%|██████████| 8/8 [18:26<00:00, 138.30s/it]
+Embeddings:   0%|[32m          [0m| 0/8 [00:00<?, ?it/s]
+Metrics:   0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+Metrics:   0%|[34m          [0m| 0/10 [00:00<?, ?it/s, Bio conservation: isolated_labels][AWARNING:jax._src.xla_bridge:An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
