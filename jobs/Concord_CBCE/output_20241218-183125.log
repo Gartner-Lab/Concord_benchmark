@@ -1,7 +1,0 @@
-Successfully started process watches.
-Successfully started recording stats for 1277708.
-Import successful
-Using device: cuda:0
-Data loading successful
-Concord.utils.feature_selector - WARNING - The number of cells for VEG selection (403200) exceeds the limit of 100,000. Downsampling cells to 50,000 for VEG selection.Note you can set subsample_frac to a value between 0 and 1 to control the number of cells.
-Concord.utils.feature_selector - INFO - Selecting highly variable features with flavor seurat_v3...

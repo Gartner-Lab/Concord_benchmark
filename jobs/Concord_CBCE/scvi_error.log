@@ -1,5 +1,0 @@
-mkdir: cannot create directory '/tmp/lock-gpu3': File exists
-mkdir: cannot create directory '/tmp/lock-gpu0': File exists
-mkdir: cannot create directory '/tmp/lock-gpu2': File exists
-mkdir: cannot create directory '/tmp/lock-gpu2': File exists
-mkdir: cannot create directory '/tmp/lock-gpu0': File exists

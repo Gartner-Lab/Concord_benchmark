@@ -1,11 +1,10 @@
 data/
 save/
+notebook_private/
 notebook/waddington_simulation.ipynb
 notebook/concord_CBCE_run.ipynb
 notebook/concord_Huycke_paper.ipynb
 notebook/waddington_simulation2.ipynb
 notebook/concord_Huycke_cc.ipynb
 notebook/concord_fish_embryogenesis.ipynb
-notebook/ZJ_Dec22.ipynb
-notebook/ZJ_Dec20.ipynb
 .Rproj.user
