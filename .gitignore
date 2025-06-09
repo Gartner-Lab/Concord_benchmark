@@ -1,6 +1,7 @@
 data/
 save/
 notebook_private/
+resources/
 notebook/waddington_simulation.ipynb
 notebook/concord_CBCE_run.ipynb
 notebook/concord_Huycke_paper.ipynb
