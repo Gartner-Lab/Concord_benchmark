@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # project-specific settings in a larger script, or pass them via command-line arguments.
 CONFIG = {
     "GENERAL_SETTINGS": {
-        "PROJ_NAME": "pbmc_Darmanis", # Name of the project/dataset being processed
+        "PROJ_NAME": "pbmc_DeSimone", # Name of the project/dataset being processed
         "SEED": 0,                    # Random seed for reproducibility
         "FILE_SUFFIX_FORMAT": '%m%d-%H%M', # Format for timestamp in output filenames/directories
     },
@@ -30,7 +30,7 @@ CONFIG = {
         # "MANUAL_DEVICE": "cpu",     # Uncomment and set if you want to force a specific device (e.g., "cpu" or "cuda:0")
     },
     "DATA_SETTINGS": {
-        "ADATA_FILENAME": 'pbmc_Darmanis_subset_9K.h5ad', # Name of the AnnData file
+        "ADATA_FILENAME": 'pbmc_DeSimone_subset_9K.h5ad', # Name of the AnnData file
         "BATCH_KEY": 'dataset',       # Key in adata.obs for batch information
         "STATE_KEY": 'cell_type',     # Key in adata.obs for cell type/state information
         "COUNT_LAYER": "counts",      # Layer in adata.layers containing raw counts
