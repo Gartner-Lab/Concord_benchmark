@@ -91,10 +91,10 @@ def main():
         logger.error(f"Error loading AnnData: {e}")
         return
 
-    # Save obs_names for optional verification later
-    obs_name_path = BASE_SAVE_DIR / "obs_names.csv"
-    adata.obs_names.to_series().to_csv(obs_name_path)
-    logger.info(f"Saved obs_names to: {obs_name_path}")
+    # # Save obs_names for optional verification later
+    # obs_name_path = BASE_SAVE_DIR / "obs_names.csv"
+    # adata.obs_names.to_series().to_csv(obs_name_path)
+    # logger.info(f"Saved obs_names to: {obs_name_path}")
 
     # Run integration
     time_log, ram_log, vram_log = ccd.ul.run_integration_methods_pipeline(
@@ -134,15 +134,15 @@ def main():
             log_data.append({
                 "method": k,
                 "runtime_sec": time_log[k],
-                "RAM_GB": ram_log[k] / 1024**3,
-                "VRAM_GB": vram_log[k] / 1024**3
+                "RAM_MB": ram_log[k],
+                "VRAM_MB": vram_log[k]
             })
         else:
             logger.warning(f"Missing performance logs for '{k}'")
 
     if log_data:
         log_df = pd.DataFrame(log_data)
-        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{FILE_SUFFIX}.tsv"
+        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{obsm_key}_{FILE_SUFFIX}.tsv"
         log_df.to_csv(log_file_path, sep='\t', index=False)
         logger.info(f"Saved performance log to: {log_file_path}")
     else:
