@@ -5,7 +5,7 @@
 #$ -r y
 #$ -q gpu.q
 #$ -pe smp 1
-# #$ -l hostname=qb3-atgpu25
+# $ -l hostname=qb3-atgpu25   # <-- Commented out: don't force specific GPU node
 #$ -l mem_free=4G
 #$ -l scratch=20G
 #$ -l h_rt=00:05:00
@@ -19,4 +19,4 @@ module load cuda/11.8
 source activate scenv || conda activate scenv
 
 # -------- Run Python Benchmark --------
-python benchmark_pbmc_DeSimone_test_concord.py
+python benchmark_pbmc_DeSimone_test_scvi.py

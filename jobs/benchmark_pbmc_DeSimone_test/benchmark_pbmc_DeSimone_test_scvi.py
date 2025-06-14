@@ -36,10 +36,10 @@ CONFIG = {
         "COUNT_LAYER": "counts",      # Layer in adata.layers containing raw counts
     },
     "INTEGRATION_SETTINGS": {
-        "METHODS": ["concord"],       # List of integration methods to run (e.g., ["concord", "scvi"])
+        "METHODS": ["scvi"],       # List of integration methods to run (e.g., ["concord", "scvi"])
         "LATENT_DIM": 30,             # Dimensionality of the latent space for integration
-        "RETURN_CORRECTED": False,    # Whether to return corrected data (Concord specific)
-        "TRANSFORM_BATCH": None,      # Batch transformation (Concord specific)
+        "RETURN_CORRECTED": False,    # Whether to return corrected data
+        "TRANSFORM_BATCH": None,      # Batch transformation
         "VERBOSE": True,              # Print detailed progress messages
     },
     "UMAP_SETTINGS": {
@@ -82,7 +82,7 @@ BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 def main():
     """
-    Main function to load scRNA-seq data, perform Concord integration,
+    Main function to load scRNA-seq data, perform integration,
     and save results and performance logs.
     """
     logger.info("Starting integration pipeline...")
@@ -141,7 +141,6 @@ def main():
         if k in time_log and k in ram_log and k in vram_log:
             log_data.append({
                 "method": k,
-                "gpu_name": gpu_name,
                 "runtime_sec": time_log[k],
                 "RAM_MB": ram_log[k],
                 "VRAM_MB": vram_log[k]

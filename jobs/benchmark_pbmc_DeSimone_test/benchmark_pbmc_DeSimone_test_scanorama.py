@@ -36,10 +36,10 @@ CONFIG = {
         "COUNT_LAYER": "counts",      # Layer in adata.layers containing raw counts
     },
     "INTEGRATION_SETTINGS": {
-        "METHODS": ["concord"],       # List of integration methods to run (e.g., ["concord", "scvi"])
+        "METHODS": ["scanorama"],       # List of integration methods to run (e.g., ["concord", "scvi"])
         "LATENT_DIM": 30,             # Dimensionality of the latent space for integration
-        "RETURN_CORRECTED": False,    # Whether to return corrected data (Concord specific)
-        "TRANSFORM_BATCH": None,      # Batch transformation (Concord specific)
+        "RETURN_CORRECTED": False,    # Whether to return corrected data 
+        "TRANSFORM_BATCH": None,      # Batch transformation 
         "VERBOSE": True,              # Print detailed progress messages
     },
     "UMAP_SETTINGS": {
@@ -58,7 +58,7 @@ if CONFIG["COMPUTATION_SETTINGS"]["AUTO_SELECT_DEVICE"]:
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 else:
     DEVICE = torch.device(CONFIG["COMPUTATION_SETTINGS"].get("MANUAL_DEVICE", "cpu"))
-
+    
 logger.info(f"Using device: {DEVICE}")
 if DEVICE.type == 'cuda':
     gpu_index = torch.cuda.current_device()
@@ -82,7 +82,7 @@ BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 def main():
     """
-    Main function to load scRNA-seq data, perform Concord integration,
+    Main function to load scRNA-seq data, perform integration,
     and save results and performance logs.
     """
     logger.info("Starting integration pipeline...")
