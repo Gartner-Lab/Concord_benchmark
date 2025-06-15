@@ -1,11 +1,18 @@
+# Exclude heavy data and intermediate results
 data/
 save/
-notebook_private/
 resources/
-notebook/waddington_simulation.ipynb
-notebook/concord_CBCE_run.ipynb
-notebook/concord_Huycke_paper.ipynb
-notebook/waddington_simulation2.ipynb
-notebook/concord_Huycke_cc.ipynb
-notebook/concord_fish_embryogenesis.ipynb
-.Rproj.user
+
+# Ignore RStudio project artifacts
+.Rproj.user/
+*.Rhistory
+*.RData
+
+# Ignore notebook checkpoints and OS files
+.ipynb_checkpoints/
+.DS_Store
+
+# Ignore logs or temp files
+*.log
+*.tmp
+*.bak

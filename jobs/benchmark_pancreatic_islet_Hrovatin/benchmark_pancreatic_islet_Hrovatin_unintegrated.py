@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import os
+import time
+import torch
+import scanpy as sc
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import concord as ccd
+import logging
+import sys
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+CONFIG = {
+    "GENERAL_SETTINGS": {
+        "PROJ_NAME": "pancreatic_islet_Hrovatin",
+        "SEED": 0,
+        "FILE_SUFFIX_FORMAT": '%m%d-%H%M',
+    },
+    "COMPUTATION_SETTINGS": {
+        "AUTO_SELECT_DEVICE": True
+        
+    },
+    "DATA_SETTINGS": {
+        "ADATA_FILENAME": "pancreatic_islet_Hrovatin_processed.h5ad",
+        "BATCH_KEY": "batch_integration",
+        "STATE_KEY": "cell_type",
+        "COUNT_LAYER": "counts",
+    },
+    "INTEGRATION_SETTINGS": {
+        "METHODS": ["unintegrated"],
+        "LATENT_DIM": 30,
+        "RETURN_CORRECTED": False,
+        "TRANSFORM_BATCH": None,
+        "VERBOSE": True,
+    },
+    "UMAP_SETTINGS": {
+        "COMPUTE_UMAP": False,
+        "N_COMPONENTS": 2,
+        "N_NEIGHBORS": 30,
+        "MIN_DIST": 0.5,
+    },
+}
+
+# Set seed
+ccd.ul.set_seed(CONFIG["GENERAL_SETTINGS"]["SEED"])
+
+# Select device
+if CONFIG["COMPUTATION_SETTINGS"]["AUTO_SELECT_DEVICE"]:
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+else:
+    DEVICE = torch.device(CONFIG["COMPUTATION_SETTINGS"].get("MANUAL_DEVICE", "cpu"))
+
+logger.info(f"Using device: {DEVICE}")
+if DEVICE.type == 'cuda':
+    gpu_index = torch.cuda.current_device()
+    gpu_name = torch.cuda.get_device_name(gpu_index)
+    logger.info(f"Using GPU {gpu_index}: {gpu_name}")
+else:
+    gpu_index = None
+    gpu_name = "CPU"
+
+FILE_SUFFIX = time.strftime(CONFIG["GENERAL_SETTINGS"]["FILE_SUFFIX_FORMAT"])
+
+BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}-{FILE_SUFFIX.split('-')[0]}/")
+BASE_DATA_DIR = Path(f"../../data/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/")
+BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
+BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+def main():
+    logger.info("Starting integration pipeline...")
+
+    adata_path = BASE_DATA_DIR / CONFIG["DATA_SETTINGS"]["ADATA_FILENAME"]
+
+    try:
+        adata = sc.read_h5ad(adata_path)
+        logger.info(f"Loaded AnnData from: {adata_path}")
+    except FileNotFoundError:
+        logger.error(f"AnnData file not found at: {adata_path}")
+        return
+    except Exception as e:
+        logger.error(f"Error loading AnnData: {e}")
+        return
+
+    time_log, ram_log, vram_log = ccd.ul.run_integration_methods_pipeline(
+        adata=adata,
+        methods=CONFIG["INTEGRATION_SETTINGS"]["METHODS"],
+        batch_key=CONFIG["DATA_SETTINGS"]["BATCH_KEY"],
+        count_layer=CONFIG["DATA_SETTINGS"]["COUNT_LAYER"],
+        class_key=CONFIG["DATA_SETTINGS"]["STATE_KEY"],
+        latent_dim=CONFIG["INTEGRATION_SETTINGS"]["LATENT_DIM"],
+        device=DEVICE,
+        return_corrected=CONFIG["INTEGRATION_SETTINGS"]["RETURN_CORRECTED"],
+        transform_batch=CONFIG["INTEGRATION_SETTINGS"]["TRANSFORM_BATCH"],
+        seed=CONFIG["GENERAL_SETTINGS"]["SEED"],
+        compute_umap=CONFIG["UMAP_SETTINGS"]["COMPUTE_UMAP"],
+        umap_n_components=CONFIG["UMAP_SETTINGS"]["N_COMPONENTS"],
+        umap_n_neighbors=CONFIG["UMAP_SETTINGS"]["N_NEIGHBORS"],
+        umap_min_dist=CONFIG["UMAP_SETTINGS"]["MIN_DIST"],
+        verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"]
+    )
+    logger.info("Integration complete.")
+
+    methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
+    for obsm_key in methods_to_save:
+        if obsm_key in adata.obsm:
+            df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
+            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
+            df.to_csv(out_path, sep='\t')
+            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
+        else:
+            logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
+
+    log_data = []
+    for k in methods_to_save:
+        if k in time_log and k in ram_log and k in vram_log:
+            log_data.append({
+                "method": k,
+                "gpu_name": gpu_name,
+                "runtime_sec": time_log[k],
+                "RAM_MB": ram_log[k],
+                "VRAM_MB": vram_log[k]
+            })
+        else:
+            logger.warning(f"Missing performance logs for '{k}'")
+
+    if log_data:
+        log_df = pd.DataFrame(log_data)
+        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{obsm_key}_{FILE_SUFFIX}.tsv"
+        log_df.to_csv(log_file_path, sep='\t', index=False)
+        logger.info(f"Saved performance log to: {log_file_path}")
+    else:
+        logger.warning("No complete log data to save.")
+
+    logger.info("All tasks finished successfully.")
+
+if __name__ == "__main__":
+    main()
