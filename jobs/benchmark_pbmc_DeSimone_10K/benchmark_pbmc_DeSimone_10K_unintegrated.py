@@ -10,43 +10,53 @@ import pandas as pd
 from pathlib import Path
 import concord as ccd
 import logging
+import sys
+import argparse
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# ------------------- Argument Parsing -------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--timestamp', required=True)
+args = parser.parse_args()
+FILE_SUFFIX = args.timestamp
+
+# ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-# ----------------- GLOBAL SETTINGS / CONFIGURATION -------------------
-# This dictionary holds all configurable parameters, logically grouped.
-# For running with multiple datasets, you might iterate over a list of
-# project-specific settings in a larger script, or pass them via command-line arguments.
+# Console logging
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# ------------------- Config -------------------
 CONFIG = {
     "GENERAL_SETTINGS": {
-        "PROJ_NAME": "pbmc_DeSimone", # Name of the project/dataset being processed
-        "SEED": 0,                    # Random seed for reproducibility
-        "FILE_SUFFIX_FORMAT": '%m%d-%H%M', # Format for timestamp in output filenames/directories
+        "PROJ_NAME": "pbmc_DeSimone_10K",
+        "SEED": 0,
     },
     "COMPUTATION_SETTINGS": {
-        "AUTO_SELECT_DEVICE": True,   # If True, script will automatically use CUDA if available, else CPU
-        # "MANUAL_DEVICE": "cpu",     # Uncomment and set if you want to force a specific device (e.g., "cpu" or "cuda:0")
+        "AUTO_SELECT_DEVICE": True
+        
     },
     "DATA_SETTINGS": {
-        "ADATA_FILENAME": 'pbmc_DeSimone_subset_9K.h5ad', # Name of the AnnData file
-        "BATCH_KEY": 'dataset',       # Key in adata.obs for batch information
-        "STATE_KEY": 'cell_type',     # Key in adata.obs for cell type/state information
-        "COUNT_LAYER": "counts",      # Layer in adata.layers containing raw counts
+        "ADATA_FILENAME": "template_pbmc_10K.h5ad",
+        "BATCH_KEY": "dataset",
+        "STATE_KEY": "cell_type",
+        "COUNT_LAYER": "counts",
     },
     "INTEGRATION_SETTINGS": {
-        "METHODS": ["scvi"],       # List of integration methods to run (e.g., ["concord", "scvi"])
-        "LATENT_DIM": 30,             # Dimensionality of the latent space for integration
-        "RETURN_CORRECTED": False,    # Whether to return corrected data
-        "TRANSFORM_BATCH": None,      # Batch transformation
-        "VERBOSE": True,              # Print detailed progress messages
+        "METHODS": ["unintegrated"],
+        "LATENT_DIM": 30,
+        "RETURN_CORRECTED": False,
+        "TRANSFORM_BATCH": None,
+        "VERBOSE": True,
     },
     "UMAP_SETTINGS": {
-        "COMPUTE_UMAP": False,        # Whether to compute UMAP embedding after integration
-        "N_COMPONENTS": 2,            # Number of UMAP components
-        "N_NEIGHBORS": 30,            # Number of neighbors for UMAP
-        "MIN_DIST": 0.5,              # Minimum distance for UMAP
+        "COMPUTE_UMAP": False,
+        "N_COMPONENTS": 2,
+        "N_NEIGHBORS": 30,
+        "MIN_DIST": 0.5,
     },
 }
 
@@ -68,23 +78,37 @@ else:
     gpu_index = None
     gpu_name = "CPU"
 
-# File suffix for timestamp
-FILE_SUFFIX = time.strftime(CONFIG["GENERAL_SETTINGS"]["FILE_SUFFIX_FORMAT"])
-
-# Paths
-BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}-{FILE_SUFFIX.split('-')[0]}/")
+# ------------------- Paths -------------------
+method = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
+BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{method}_{FILE_SUFFIX}/")
 BASE_DATA_DIR = Path(f"../../data/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# File logger after save dir created
+log_file_path = BASE_SAVE_DIR / "run.log"
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+logger.info(f"Logging to: {log_file_path}")
 
-# ----------------- MAIN FUNCTION -------------------
+class StreamToLogger:
+    def __init__(self, logger, log_level):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ""
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line)
+
+    def flush(self):
+        pass
+
+sys.stdout = StreamToLogger(logger, logging.INFO)
+sys.stderr = StreamToLogger(logger, logging.INFO)
 
 def main():
-    """
-    Main function to load scRNA-seq data, perform integration,
-    and save results and performance logs.
-    """
     logger.info("Starting integration pipeline...")
 
     adata_path = BASE_DATA_DIR / CONFIG["DATA_SETTINGS"]["ADATA_FILENAME"]
@@ -99,12 +123,6 @@ def main():
         logger.error(f"Error loading AnnData: {e}")
         return
 
-    # # Save obs_names for optional verification later
-    # obs_name_path = BASE_SAVE_DIR / "obs_names.csv"
-    # adata.obs_names.to_series().to_csv(obs_name_path)
-    # logger.info(f"Saved obs_names to: {obs_name_path}")
-
-    # Run integration
     time_log, ram_log, vram_log = ccd.ul.run_integration_methods_pipeline(
         adata=adata,
         methods=CONFIG["INTEGRATION_SETTINGS"]["METHODS"],
@@ -120,27 +138,26 @@ def main():
         umap_n_components=CONFIG["UMAP_SETTINGS"]["N_COMPONENTS"],
         umap_n_neighbors=CONFIG["UMAP_SETTINGS"]["N_NEIGHBORS"],
         umap_min_dist=CONFIG["UMAP_SETTINGS"]["MIN_DIST"],
-        verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"],
+        verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"]
     )
     logger.info("Integration complete.")
 
-    # Save embeddings with obs_names as index
     methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
     for obsm_key in methods_to_save:
         if obsm_key in adata.obsm:
             df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            embedding_file_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
-            df.to_csv(embedding_file_path, sep='\t')
-            logger.info(f"Saved embedding for '{obsm_key}' to: {embedding_file_path}")
+            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
+            df.to_csv(out_path, sep='\t')
+            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
         else:
             logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
 
-    # Save performance logs
     log_data = []
     for k in methods_to_save:
         if k in time_log and k in ram_log and k in vram_log:
             log_data.append({
                 "method": k,
+                "gpu_name": gpu_name,
                 "runtime_sec": time_log[k],
                 "RAM_MB": ram_log[k],
                 "VRAM_MB": vram_log[k]
@@ -150,7 +167,7 @@ def main():
 
     if log_data:
         log_df = pd.DataFrame(log_data)
-        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{obsm_key}_{FILE_SUFFIX}.tsv"
+        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{method}_{FILE_SUFFIX}.tsv"
         log_df.to_csv(log_file_path, sep='\t', index=False)
         logger.info(f"Saved performance log to: {log_file_path}")
     else:
