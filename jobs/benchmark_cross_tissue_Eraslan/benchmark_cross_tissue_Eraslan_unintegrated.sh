@@ -5,18 +5,15 @@
 #$ -r y
 #$ -q gpu.q
 #$ -pe smp 1
-# #$ -l hostname=qb3-atgpu25
-#$ -l mem_free=4G
-#$ -l scratch=20G
-#$ -l h_rt=00:05:00
+#$ -l mem_free=16G
+#$ -l scratch=100G
+#$ -l h_rt=02:00:00
 
-# -------- Environment Info --------
 echo "Running on: $(hostname)"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
 
-# -------- Load Conda and CUDA --------
 module load cuda/11.8
 source activate scenv || conda activate scenv
 
-# -------- Run Python Benchmark --------
-python benchmark_pbmc_DeSimone_test_concord.py
+TIMESTAMP=$(date +'%m%d-%H%M')
+python benchmark_cross_tissue_Eraslan_unintegrated.py --timestamp $TIMESTAMP

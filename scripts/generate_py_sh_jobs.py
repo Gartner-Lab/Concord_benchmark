@@ -14,16 +14,29 @@ from pathlib import Path
 import concord as ccd
 import logging
 import sys
+import argparse
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# ------------------- Argument Parsing -------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--timestamp', required=True)
+args = parser.parse_args()
+FILE_SUFFIX = args.timestamp
+
+# ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
+# Console logging
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# ------------------- Config -------------------
 CONFIG = {{
     "GENERAL_SETTINGS": {{
         "PROJ_NAME": "{proj_name}",
         "SEED": 0,
-        "FILE_SUFFIX_FORMAT": '%m%d-%H%M',
     }},
     "COMPUTATION_SETTINGS": {{
         "AUTO_SELECT_DEVICE": {auto_device}{manual_device_comma}
@@ -68,12 +81,35 @@ else:
     gpu_index = None
     gpu_name = "CPU"
 
-FILE_SUFFIX = time.strftime(CONFIG["GENERAL_SETTINGS"]["FILE_SUFFIX_FORMAT"])
-
-BASE_SAVE_DIR = Path(f"../../save/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}-{{FILE_SUFFIX.split('-')[0]}}/")
+# ------------------- Paths -------------------
+method = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
+BASE_SAVE_DIR = Path(f"../../save/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/{{method}}_{{FILE_SUFFIX}}/")
 BASE_DATA_DIR = Path(f"../../data/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# File logger after save dir created
+log_file_path = BASE_SAVE_DIR / "run.log"
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+logger.info(f"Logging to: {{log_file_path}}")
+
+class StreamToLogger:
+    def __init__(self, logger, log_level):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ""
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line)
+
+    def flush(self):
+        pass
+
+sys.stdout = StreamToLogger(logger, logging.INFO)
+sys.stderr = StreamToLogger(logger, logging.INFO)
 
 def main():
     logger.info("Starting integration pipeline...")
@@ -134,7 +170,7 @@ def main():
 
     if log_data:
         log_df = pd.DataFrame(log_data)
-        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{{obsm_key}}_{{FILE_SUFFIX}}.tsv"
+        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{{method}}_{{FILE_SUFFIX}}.tsv"
         log_df.to_csv(log_file_path, sep='\t', index=False)
         logger.info(f"Saved performance log to: {{log_file_path}}")
     else:
@@ -163,14 +199,14 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
 module load cuda/11.8
 source activate {conda_env} || conda activate {conda_env}
 
-python {script_name}.py
+TIMESTAMP=$(date +'%m%d-%H%M')
+python {script_name}.py --timestamp $TIMESTAMP
 """
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', required=True)
     parser.add_argument('--proj_name', required=True)
-    parser.add_argument('--author_name', required=True)
     parser.add_argument('--adata_filename', required=True)
     parser.add_argument('--methods', nargs='+', required=True)
     parser.add_argument('--batch_key', required=True)
