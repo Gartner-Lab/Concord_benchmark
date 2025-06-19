@@ -17,6 +17,9 @@ resources/
 *.tmp
 *.bak
 
+# ignore folder notebook_private
+
+
 # Ignore specific notebooks
 notebook/waddington_simulation.ipynb
 notebook/concord_CBCE_run.ipynb
