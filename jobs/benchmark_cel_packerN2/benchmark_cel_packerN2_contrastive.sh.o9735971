@@ -1,0 +1,17 @@
+Running on: qb3-atgpu10.wynton.ucsf.edu
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+2025-06-27 11:45:48,648 - INFO - Using device: cuda
+2025-06-27 11:45:48,760 - INFO - Using GPU 0: NVIDIA A40
+2025-06-27 11:45:48,774 - INFO - Logging to: ../../save/cel_packerN2/contrastive_0627-1145/run.log
+2025-06-27 11:45:48,777 - INFO - Starting integration pipeline...
+2025-06-27 11:45:52,311 - INFO - Loaded AnnData from: ../../data/cel_packerN2/cel_packerN2_preprocessed.h5ad
+2025-06-27 11:45:52,561 - INFO - ❌ contrastive failed: concord.utils.integration_methods.run_concord() got multiple values for keyword argument 'verbose'
+2025-06-27 11:45:52,562 - INFO - ✅ All selected methods completed.
+2025-06-27 11:45:52,565 - INFO - Integration complete.
+2025-06-27 11:45:52,567 - WARNING - obsm['contrastive'] not found. Skipping.
+2025-06-27 11:45:52,585 - INFO - Saved performance log to: ../../save/cel_packerN2/contrastive_0627-1145/benchmark_log_0627-1145.tsv
+2025-06-27 11:45:52,586 - INFO - All tasks finished successfully.

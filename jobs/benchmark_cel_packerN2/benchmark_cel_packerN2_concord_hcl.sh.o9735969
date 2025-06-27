@@ -1,0 +1,17 @@
+Running on: qb3-atgpu8.wynton.ucsf.edu
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+2025-06-27 11:40:13,570 - INFO - Using device: cuda
+2025-06-27 11:40:13,697 - INFO - Using GPU 0: NVIDIA A40
+2025-06-27 11:40:13,709 - INFO - Logging to: ../../save/cel_packerN2/concord_hcl_0627-1138/run.log
+2025-06-27 11:40:13,721 - INFO - Starting integration pipeline...
+2025-06-27 11:40:18,237 - INFO - Loaded AnnData from: ../../data/cel_packerN2/cel_packerN2_preprocessed.h5ad
+2025-06-27 11:40:18,537 - INFO - ❌ concord_hcl failed: concord.utils.integration_methods.run_concord() got multiple values for keyword argument 'verbose'
+2025-06-27 11:40:18,538 - INFO - ✅ All selected methods completed.
+2025-06-27 11:40:18,541 - INFO - Integration complete.
+2025-06-27 11:40:18,542 - WARNING - obsm['concord_hcl'] not found. Skipping.
+2025-06-27 11:40:18,714 - INFO - Saved performance log to: ../../save/cel_packerN2/concord_hcl_0627-1138/benchmark_log_0627-1138.tsv
+2025-06-27 11:40:18,715 - INFO - All tasks finished successfully.

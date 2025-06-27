@@ -59,7 +59,7 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
-        "CONCORD_KWARGS": {'batch_size': 64, 'encoder_dims': [1000], 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'verbose': True, 'seed': 0, 'save_dir': '../../save/cel_packerN2'}
+        "CONCORD_KWARGS": {'batch_size': 64, 'encoder_dims': [1000], 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2'}
     }
 }
 
