@@ -59,7 +59,7 @@ CONFIG = {{
         "COMPUTE_UMAP": False,
         "N_COMPONENTS": 2,
         "N_NEIGHBORS": 30,
-        "MIN_DIST": 0.5,
+        "MIN_DIST": 0.1,
     }},
 }}
 
