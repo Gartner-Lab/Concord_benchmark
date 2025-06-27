@@ -126,7 +126,7 @@ def main():
         logger.error(f"Error loading AnnData: {{e}}")
         return
 
-    time_log, ram_log, vram_log = ccd.ul.run_integration_methods_pipeline(
+    log_df = ccd.bm.run_integration_methods_pipeline(
         adata=adata,
         methods=CONFIG["INTEGRATION_SETTINGS"]["METHODS"],
         batch_key=CONFIG["DATA_SETTINGS"]["BATCH_KEY"],
@@ -144,37 +144,24 @@ def main():
         verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"]
     )
     logger.info("Integration complete.")
-
+    
+    # Save embeddings
     methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
     for obsm_key in methods_to_save:
         if obsm_key in adata.obsm:
             df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            out_path = BASE_SAVE_DIR / f"{{obsm_key}}_embedding_{{FILE_SUFFIX}}.tsv"
+            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
             df.to_csv(out_path, sep='\t')
-            logger.info(f"Saved embedding for '{{obsm_key}}' to: {{out_path}}")
+            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
         else:
-            logger.warning(f"obsm['{{obsm_key}}'] not found. Skipping.")
+            logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
 
-    log_data = []
-    for k in methods_to_save:
-        if k in time_log and k in ram_log and k in vram_log:
-            log_data.append({{
-                "method": k,
-                "gpu_name": gpu_name,
-                "runtime_sec": time_log[k],
-                "RAM_MB": ram_log[k],
-                "VRAM_MB": vram_log[k]
-            }})
-        else:
-            logger.warning(f"Missing performance logs for '{{k}}'")
-
-    if log_data:
-        log_df = pd.DataFrame(log_data)
-        log_file_path = BASE_SAVE_DIR / f"benchmark_log_{{method}}_{{FILE_SUFFIX}}.tsv"
-        log_df.to_csv(log_file_path, sep='\t', index=False)
-        logger.info(f"Saved performance log to: {{log_file_path}}")
-    else:
-        logger.warning("No complete log data to save.")
+    # Save performance log
+    log_df.insert(0, "method", log_df.index)
+    log_df.insert(1, "gpu_name", gpu_name)
+    log_file_path = BASE_SAVE_DIR / f"benchmark_log_{FILE_SUFFIX}.tsv"
+    log_df.to_csv(log_file_path, sep='\t', index=False)
+    logger.info(f"Saved performance log to: {log_file_path}")
 
     logger.info("All tasks finished successfully.")
 
@@ -192,6 +179,7 @@ SH_TEMPLATE = """#!/bin/bash
 #$ -l mem_free={mem}
 #$ -l scratch={scratch}
 #$ -l h_rt={runtime}
+#$ -l compute_cap=86
 
 echo "Running on: $(hostname)"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv

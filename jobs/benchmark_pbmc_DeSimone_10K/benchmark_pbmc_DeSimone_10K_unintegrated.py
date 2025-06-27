@@ -40,7 +40,7 @@ CONFIG = {
         
     },
     "DATA_SETTINGS": {
-        "ADATA_FILENAME": "template_pbmc_10K.h5ad",
+        "ADATA_FILENAME": "template_pbmc_10K_preprocessed.h5ad",
         "BATCH_KEY": "dataset",
         "STATE_KEY": "cell_type",
         "COUNT_LAYER": "counts",

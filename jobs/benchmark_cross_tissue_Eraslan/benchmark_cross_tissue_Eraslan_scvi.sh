@@ -5,15 +5,19 @@
 #$ -r y
 #$ -q gpu.q
 #$ -pe smp 1
-#$ -l mem_free=16G
-#$ -l scratch=100G
-#$ -l h_rt=02:00:00
+#$ -l mem_free=8G
+#$ -l scratch=50G
+#$ -l h_rt=01:00:00
 
 echo "Running on: $(hostname)"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
 
 module load cuda/11.8
-source activate scenv || conda activate scenv
 
+# Initialize conda and activate environment
+source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate scenv
+
+cd $(dirname ../jobs/benchmark_cross_tissue_Eraslan/benchmark_cross_tissue_Eraslan_scvi.py)
 TIMESTAMP=$(date +'%m%d-%H%M')
 python benchmark_cross_tissue_Eraslan_scvi.py --timestamp $TIMESTAMP

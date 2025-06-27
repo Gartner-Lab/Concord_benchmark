@@ -40,8 +40,8 @@ CONFIG = {
         
     },
     "DATA_SETTINGS": {
-        "ADATA_FILENAME": "cross_tissue_Eraslan_processed.h5ad",
-        "BATCH_KEY": "batch",
+        "ADATA_FILENAME": "cross_tissue_Eraslan_preprocessed.h5ad",
+        "BATCH_KEY": "donor_id",
         "STATE_KEY": "cell_type",
         "COUNT_LAYER": "counts",
     },
@@ -123,7 +123,7 @@ def main():
         logger.error(f"Error loading AnnData: {e}")
         return
 
-    time_log, ram_log, vram_log = ccd.ul.run_integration_methods_pipeline(
+    time_log, ram_log, vram_log = ccd.bm.run_integration_methods_pipeline(
         adata=adata,
         methods=CONFIG["INTEGRATION_SETTINGS"]["METHODS"],
         batch_key=CONFIG["DATA_SETTINGS"]["BATCH_KEY"],

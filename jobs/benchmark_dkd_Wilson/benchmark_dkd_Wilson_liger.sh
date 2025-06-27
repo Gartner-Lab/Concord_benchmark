@@ -5,14 +5,19 @@
 #$ -r y
 #$ -q gpu.q
 #$ -pe smp 1
-#$ -l mem_free=16G
+#$ -l mem_free=8G
 #$ -l scratch=50G
-#$ -l h_rt=02:00:00
+#$ -l h_rt=01:00:00
 
 echo "Running on: $(hostname)"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
 
 module load cuda/11.8
-source activate scenv || conda activate scenv
 
-python benchmark_dkd_Wilson_liger.py
+# Initialize conda and activate environment
+source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate scenv
+
+cd $(dirname ../jobs/benchmark_dkd_Wilson/benchmark_dkd_Wilson_liger.py)
+TIMESTAMP=$(date +'%m%d-%H%M')
+python benchmark_dkd_Wilson_liger.py --timestamp $TIMESTAMP

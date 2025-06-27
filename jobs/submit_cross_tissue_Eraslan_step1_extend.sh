@@ -1,0 +1,32 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -j y
+#$ -r y
+#$ -q gpu.q
+#$ -pe smp 1
+#$ -l mem_free=128G
+#$ -l scratch=50G
+#$ -l h_rt=02:00:00
+#$ -N bmk_cross_tissue_Eraslan_s1_ext
+
+# -------- System Info --------
+echo "Running on: $(hostname)"
+nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
+
+# -------- Load CUDA --------
+module load cuda/11.8
+
+# -------- Conda Setup --------
+source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate scenv
+
+# -------- Logging --------
+LOG_DIR="../save/cross_tissue_Eraslan/logs"
+mkdir -p "$LOG_DIR"
+exec > >(tee -a "${LOG_DIR}/job_${JOB_ID}.log") 2>&1
+
+# -------- Run Step 1 --------
+python ../notebook/benchmark_cross_tissue_Eraslan_step1_extend.py
+
+echo "✅ Step 1 finished at $(date)"

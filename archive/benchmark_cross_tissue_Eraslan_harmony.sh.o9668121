@@ -1,0 +1,23 @@
+Running on: qb3-idgpu8.wynton.ucsf.edu
+index, name, memory.total [MiB], driver_version
+0, NVIDIA GeForce RTX 2080 Ti, 11264 MiB, 550.127.05
+1, NVIDIA GeForce RTX 2080 Ti, 11264 MiB, 550.127.05
+2, NVIDIA GeForce RTX 2080 Ti, 11264 MiB, 550.127.05
+3, NVIDIA GeForce RTX 2080 Ti, 11264 MiB, 550.127.05
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/louvain/__init__.py:54: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import get_distribution, DistributionNotFound
+2025-06-23 18:05:18,091 - INFO - Using device: cuda
+2025-06-23 18:05:18,153 - INFO - Using GPU 0: NVIDIA GeForce RTX 2080 Ti
+2025-06-23 18:05:18,160 - INFO - Logging to: ../../save/cross_tissue_Eraslan/harmony_0623-1805/run.log
+2025-06-23 18:05:18,161 - INFO - Starting integration pipeline...
+2025-06-23 18:05:26,108 - INFO - Loaded AnnData from: ../../data/cross_tissue_Eraslan/cross_tissue_Eraslan_preprocessed.h5ad
+2025-06-23 18:05:38,925 - INFO - 	Initialization is completed.
+2025-06-23 18:05:46,124 - INFO - 	Completed 1 / 10 iteration(s).
+2025-06-23 18:06:01,412 - INFO - 	Completed 2 / 10 iteration(s).
+2025-06-23 18:06:01,416 - INFO - Reach convergence after 2 iteration(s).
+2025-06-23 18:06:01,418 - INFO - harmony completed in 35.31 sec.
+2025-06-23 18:06:01,419 - INFO - ✅ Selected methods completed.
+2025-06-23 18:06:01,420 - INFO - Integration complete.
+2025-06-23 18:06:07,457 - INFO - Saved embedding for 'harmony' to: ../../save/cross_tissue_Eraslan/harmony_0623-1805/harmony_embedding_0623-1805.tsv
+2025-06-23 18:06:07,463 - INFO - Saved performance log to: ../../save/cross_tissue_Eraslan/harmony_0623-1805/benchmark_log_harmony_0623-1805.tsv
+2025-06-23 18:06:07,464 - INFO - All tasks finished successfully.
