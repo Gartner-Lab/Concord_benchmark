@@ -19,6 +19,5 @@ module load cuda/11.8
 source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
 conda activate cellpath
 
-cd $(dirname ../jobs/benchmark_cel_packerN2/benchmark_cel_packerN2_scanorama.py)
 TIMESTAMP=$(date +'%m%d-%H%M')
 python benchmark_cel_packerN2_scanorama.py --timestamp $TIMESTAMP
