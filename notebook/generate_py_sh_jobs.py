@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import json, textwrap
 
 PYTHON_TEMPLATE = r"""#!/usr/bin/env python
 # coding: utf-8
@@ -50,7 +51,7 @@ CONFIG = {{
     }},
     "INTEGRATION_SETTINGS": {{
         "METHODS": ["{method}"],
-        "LATENT_DIM": 30,
+        "LATENT_DIM": {latent_dim},
         "RETURN_CORRECTED": False,
         "TRANSFORM_BATCH": None,
         "VERBOSE": True,
@@ -61,6 +62,9 @@ CONFIG = {{
         "N_NEIGHBORS": 30,
         "MIN_DIST": 0.1,
     }},
+    "CONCORD_SETTINGS": {{
+        "CONCORD_KWARGS": {concord_kwargs_repr}
+    }}
 }}
 
 # Set seed
@@ -141,7 +145,8 @@ def main():
         umap_n_components=CONFIG["UMAP_SETTINGS"]["N_COMPONENTS"],
         umap_n_neighbors=CONFIG["UMAP_SETTINGS"]["N_NEIGHBORS"],
         umap_min_dist=CONFIG["UMAP_SETTINGS"]["MIN_DIST"],
-        verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"]
+        verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"],
+        concord_kwargs=CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"]
     )
     logger.info("Integration complete.")
     
@@ -150,18 +155,18 @@ def main():
     for obsm_key in methods_to_save:
         if obsm_key in adata.obsm:
             df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
+            out_path = BASE_SAVE_DIR / f"{{obsm_key}}_embedding_{{FILE_SUFFIX}}.tsv"
             df.to_csv(out_path, sep='\t')
-            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
+            logger.info(f"Saved embedding for '{{obsm_key}}' to: {{out_path}}")
         else:
-            logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
+            logger.warning(f"obsm['{{obsm_key}}'] not found. Skipping.")
 
     # Save performance log
     log_df.insert(0, "method", log_df.index)
     log_df.insert(1, "gpu_name", gpu_name)
-    log_file_path = BASE_SAVE_DIR / f"benchmark_log_{FILE_SUFFIX}.tsv"
+    log_file_path = BASE_SAVE_DIR / f"benchmark_log_{{FILE_SUFFIX}}.tsv"
     log_df.to_csv(log_file_path, sep='\t', index=False)
-    logger.info(f"Saved performance log to: {log_file_path}")
+    logger.info(f"Saved performance log to: {{log_file_path}}")
 
     logger.info("All tasks finished successfully.")
 
@@ -202,16 +207,25 @@ def main():
     parser.add_argument('--methods', nargs='+', required=True)
     parser.add_argument('--batch_key', required=True)
     parser.add_argument('--state_key', required=True)
+    parser.add_argument('--latent_dim', type=int, default=50)
     parser.add_argument('--device', default='auto', choices=['auto', 'cpu', 'cuda'])
     parser.add_argument('--mem', default='8G')
     parser.add_argument('--scratch', default='50G')
     parser.add_argument('--runtime', default='01:00:00')
     parser.add_argument('--conda_env', default='scenv')
     parser.add_argument('--output_dir', default='./generated_scripts')
+    parser.add_argument('--concord_kwargs', default='{}',
+                    help="JSON string or @file path with Concord arguments")
     args = parser.parse_args()
 
     proj_out_dir = Path(args.output_dir) / f"benchmark_{args.proj_name}"
     proj_out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------ parse concord_kwargs once (dict) -----------------------------
+    if args.concord_kwargs.startswith("@"):
+        concord_kwargs = json.loads(Path(args.concord_kwargs[1:]).read_text())
+    else:
+        concord_kwargs = json.loads(textwrap.dedent(args.concord_kwargs))
 
     for method in args.methods:
         script_name = f"benchmark_{args.proj_name}_{method}"
@@ -233,7 +247,9 @@ def main():
             method=method,
             auto_device=auto_device,
             manual_device=manual_device,
-            manual_device_comma=manual_device_comma
+            manual_device_comma=manual_device_comma,
+            latent_dim=args.latent_dim,
+            concord_kwargs_repr=repr(concord_kwargs)
         )
 
         py_path = proj_out_dir / f"{script_name}.py"
