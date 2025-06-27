@@ -1,0 +1,19 @@
+Running on: qb3-atgpu8.wynton.ucsf.edu
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/louvain/__init__.py:54: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import get_distribution, DistributionNotFound
+2025-06-23 11:49:18,367 - INFO - Using device: cuda
+2025-06-23 11:49:18,481 - INFO - Using GPU 0: NVIDIA A40
+2025-06-23 11:49:18,511 - INFO - Logging to: ../../save/cross_tissue_Eraslan/unintegrated_0623-1149/run.log
+2025-06-23 11:49:18,512 - INFO - Starting integration pipeline...
+2025-06-23 11:49:24,939 - INFO - Loaded AnnData from: ../../data/cross_tissue_Eraslan/cross_tissue_Eraslan_preprocessed.h5ad
+2025-06-23 11:49:24,941 - INFO - ✅ Selected methods completed.
+2025-06-23 11:49:24,942 - INFO - Integration complete.
+2025-06-23 11:49:29,800 - INFO - Saved embedding for 'unintegrated' to: ../../save/cross_tissue_Eraslan/unintegrated_0623-1149/unintegrated_embedding_0623-1149.tsv
+2025-06-23 11:49:29,801 - WARNING - Missing performance logs for 'unintegrated'
+2025-06-23 11:49:29,802 - WARNING - No complete log data to save.
+2025-06-23 11:49:29,803 - INFO - All tasks finished successfully.

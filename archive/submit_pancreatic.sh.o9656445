@@ -1,0 +1,39 @@
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/louvain/__init__.py:54: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import get_distribution, DistributionNotFound
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/sklearn/utils/deprecation.py:132: FutureWarning: 'force_all_finite' was renamed to 'ensure_all_finite' in 1.6 and will be removed in 1.8.
+  warnings.warn(
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+✅ Loaded: ../data/pancreatic_islet_Hrovatin/pancreatic_islet_Hrovatin_preprocessed.h5ad with 301796 cells
+✅ obsm['X_scvi'] loaded
+Concord - INFO - UMAP embedding stored in adata.obsm['scvi_UMAP']
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/sklearn/utils/deprecation.py:132: FutureWarning: 'force_all_finite' was renamed to 'ensure_all_finite' in 1.6 and will be removed in 1.8.
+  warnings.warn(
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+✅ obsm['scvi_UMAP'] computed
+✅ obsm['X_harmony'] loaded
+Concord - INFO - UMAP embedding stored in adata.obsm['harmony_UMAP']
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/sklearn/utils/deprecation.py:132: FutureWarning: 'force_all_finite' was renamed to 'ensure_all_finite' in 1.6 and will be removed in 1.8.
+  warnings.warn(
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+✅ obsm['harmony_UMAP'] computed
+✅ obsm['X_scanorama'] loaded
+Concord - INFO - UMAP embedding stored in adata.obsm['scanorama_UMAP']
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/sklearn/utils/deprecation.py:132: FutureWarning: 'force_all_finite' was renamed to 'ensure_all_finite' in 1.6 and will be removed in 1.8.
+  warnings.warn(
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+✅ obsm['scanorama_UMAP'] computed
+✅ obsm['X_liger'] loaded
+Concord - INFO - UMAP embedding stored in adata.obsm['liger_UMAP']
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/sklearn/utils/deprecation.py:132: FutureWarning: 'force_all_finite' was renamed to 'ensure_all_finite' in 1.6 and will be removed in 1.8.
+  warnings.warn(
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/umap/umap_.py:1952: UserWarning: n_jobs value 1 overridden to 1 by setting random_state. Use no seed for parallelism.
+  warn(
+✅ obsm['liger_UMAP'] computed
+✅ obsm['X_unintegrated'] loaded
+Concord - INFO - UMAP embedding stored in adata.obsm['unintegrated_UMAP']
+✅ obsm['unintegrated_UMAP'] computed
+✅ Final AnnData saved to: ../data/pancreatic_islet_Hrovatin/pancreatic_islet_Hrovatin_final.h5ad

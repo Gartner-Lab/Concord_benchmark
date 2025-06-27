@@ -1,0 +1,23 @@
+Running on: qb3-atgpu1
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/louvain/__init__.py:54: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import get_distribution, DistributionNotFound
+2025-06-23 18:59:51,355 - INFO - Using device: cuda
+2025-06-23 18:59:51,505 - INFO - Using GPU 0: NVIDIA A40
+2025-06-23 18:59:51,538 - INFO - Logging to: ../../save/cross_tissue_Eraslan/harmony_0623-1859/run.log
+2025-06-23 18:59:51,539 - INFO - Starting integration pipeline...
+2025-06-23 18:59:58,150 - INFO - Loaded AnnData from: ../../data/cross_tissue_Eraslan/cross_tissue_Eraslan_preprocessed.h5ad
+2025-06-23 19:00:08,851 - INFO - 	Initialization is completed.
+2025-06-23 19:00:22,474 - INFO - 	Completed 1 / 10 iteration(s).
+2025-06-23 19:00:43,318 - INFO - 	Completed 2 / 10 iteration(s).
+2025-06-23 19:00:43,320 - INFO - Reach convergence after 2 iteration(s).
+2025-06-23 19:00:43,322 - INFO - harmony completed in 45.17 sec.
+2025-06-23 19:00:43,323 - INFO - ✅ Selected methods completed.
+2025-06-23 19:00:43,324 - INFO - Integration complete.
+2025-06-23 19:00:49,607 - INFO - Saved embedding for 'harmony' to: ../../save/cross_tissue_Eraslan/harmony_0623-1859/harmony_embedding_0623-1859.tsv
+2025-06-23 19:00:49,612 - INFO - Saved performance log to: ../../save/cross_tissue_Eraslan/harmony_0623-1859/benchmark_log_harmony_0623-1859.tsv
+2025-06-23 19:00:49,613 - INFO - All tasks finished successfully.
