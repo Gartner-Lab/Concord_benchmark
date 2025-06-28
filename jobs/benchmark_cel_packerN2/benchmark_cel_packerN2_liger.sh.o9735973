@@ -77,3 +77,9 @@ index, name, memory.total [MiB], driver_version
 2025-06-27 13:18:19,393 - INFO - 100%|##########| 30/30 [1:27:19<00:00, 173.29s/it]
 2025-06-27 13:18:19,395 - INFO - 
 2025-06-27 13:18:19,396 - INFO - 100%|##########| 30/30 [1:27:19<00:00, 174.66s/it]
+2025-06-27 13:26:56,546 - INFO - liger: 5879.11s | 4094.07 MB RAM | 0.00 MB VRAM
+2025-06-27 13:26:56,547 - INFO - ✅ All selected methods completed.
+2025-06-27 13:26:56,553 - INFO - Integration complete.
+2025-06-27 13:27:09,787 - INFO - Saved embedding for 'liger' to: ../../save/cel_packerN2/liger_0627-1148/liger_embedding_0627-1148.tsv
+2025-06-27 13:27:09,794 - INFO - Saved performance log to: ../../save/cel_packerN2/liger_0627-1148/benchmark_log_0627-1148.tsv
+2025-06-27 13:27:09,795 - INFO - All tasks finished successfully.
