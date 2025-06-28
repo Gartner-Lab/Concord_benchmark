@@ -31,7 +31,7 @@ def latest_run_dir(save_root: Path, method: str) -> Optional[Path]:
     return max(candidates, key=lambda p: extract_timestamp(p.name, method))
 
 
-def add_embeddings(adata: AnnData, proj_name: str, methods: list[str], run_umap = True) -> AnnData:
+def add_embeddings(adata: AnnData, proj_name: str, methods: list[str]) -> AnnData:
     save_root = Path(f"../save/{proj_name}")
 
     for method in methods:
@@ -53,18 +53,6 @@ def add_embeddings(adata: AnnData, proj_name: str, methods: list[str], run_umap 
 
         adata.obsm[f"{method}"] = df.values
         print(f"✅ obsm['{method}'] loaded")
-
-        if run_umap:
-            if f"{method}_UMAP" in adata.obsm:
-                print(f"[⚠️ Warning] obsm['{method}_UMAP'] already exists, skipping UMAP computation")
-            else:
-                print(f"Computing UMAP for {method}...")
-                ccd.ul.run_umap(
-                    adata,
-                    source_key=f"{method}",
-                    result_key=f"{method}_UMAP"
-                )
-                print(f"✅ obsm['{method}_UMAP'] computed")
 
     return adata
 
