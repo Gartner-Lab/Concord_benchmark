@@ -1,0 +1,19 @@
+#!/bin/bash
+# Auto-generated — submits every job for this project
+# Run from this folder, or let the script cd into it.
+
+cd "$(dirname "$0")"
+
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_augmentation_mask_prob-0_1.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_augmentation_mask_prob-0_3.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_augmentation_mask_prob-0_5.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_augmentation_mask_prob-0_7.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-128.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-2048.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-32.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-512.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_latent_dim-100.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_latent_dim-1000.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_latent_dim-300.sh"
+qsub "benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_latent_dim-50.sh"
