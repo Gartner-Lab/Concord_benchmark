@@ -123,13 +123,13 @@ bench_df <- data.frame(method   = METHOD,
 write_tsv(bench_df,
           file = file.path(
             SAVE_DIR,
-            paste0("benchmark_log_", METHOD, "_", FILE_SUFFIX, ".tsv")))
+            paste0("benchmark_log_", FILE_SUFFIX, ".tsv")))
 
 # 2) full peakRAM profile (peak + total + all metadata)
 write_tsv(ram_res,
           file = file.path(
             SAVE_DIR,
-            paste0("ram_profile_", METHOD, "_", FILE_SUFFIX, ".tsv")))
+            paste0("ram_profile_", FILE_SUFFIX, ".tsv")))
 
 cat("🎉  All outputs written to", SAVE_DIR, "\n")
 '''
