@@ -51,7 +51,7 @@ METHOD      <- "{method}"            # e.g.  seurat_rpca / seurat_cca
 LATENT_DIM  <- {latent_dim}
 BATCH_KEY   <- "{batch_key}"
 
-SAVE_DIR <- file.path("..","..","save", PROJ_NAME)
+SAVE_DIR <- file.path("..","..","save", PROJ_NAME, paste0(METHOD, "_", FILE_SUFFIX))
 dir.create(SAVE_DIR, recursive = TRUE, showWarnings = FALSE)
 
 cat("▶ Loading ExpressionSet …\n")
