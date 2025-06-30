@@ -15,9 +15,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
@@ -50,7 +55,7 @@ CONFIG = {
         "LATENT_DIM": 300,
         "RETURN_CORRECTED": False,
         "TRANSFORM_BATCH": None,
-        "VERBOSE": True,
+        "VERBOSE": False,
     },
     "UMAP_SETTINGS": {
         "COMPUTE_UMAP": False,
@@ -59,7 +64,7 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
-        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 2048, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2_hyperparam', 'tag': '729bea', 'output_key': 'concord_hcl_batch_size-2048'}
+        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 2048, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2_hyperparam', 'output_key': 'concord_hcl_batch_size-2048'}
     }
 }
 
@@ -147,15 +152,23 @@ def main():
     logger.info("Integration complete.")
     
     # Save embeddings
-    methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
-    for obsm_key in methods_to_save:
-        if obsm_key in adata.obsm:
-            df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
-            df.to_csv(out_path, sep='\t')
-            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
-        else:
-            logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
+    output_key_to_save = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+        "output_key",
+        method,
+    )
+
+    # save block in the template  ⬇⬇⬇ only these lines change
+    if output_key_to_save in adata.obsm:
+        df = pd.DataFrame(
+            adata.obsm[output_key_to_save], index=adata.obs_names
+        )
+        out_path = BASE_SAVE_DIR / f"{output_key_to_save}_embedding_{FILE_SUFFIX}.tsv"
+        df.to_csv(out_path, sep="\t")
+        logger.info(f"Saved embedding for '{output_key_to_save}' to: {out_path}")
+    else:
+        logger.warning(f"obsm['{output_key_to_save}'] not found. Skipping save.")
+
+
 
     # Save performance log
     log_df.insert(0, "method", log_df.index)

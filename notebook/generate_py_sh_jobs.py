@@ -20,9 +20,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
@@ -55,7 +60,7 @@ CONFIG = {{
         "LATENT_DIM": {latent_dim},
         "RETURN_CORRECTED": False,
         "TRANSFORM_BATCH": None,
-        "VERBOSE": True,
+        "VERBOSE": {verbose},
     }},
     "UMAP_SETTINGS": {{
         "COMPUTE_UMAP": False,
@@ -152,15 +157,23 @@ def main():
     logger.info("Integration complete.")
     
     # Save embeddings
-    methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
-    for obsm_key in methods_to_save:
-        if obsm_key in adata.obsm:
-            df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            out_path = BASE_SAVE_DIR / f"{{obsm_key}}_embedding_{{FILE_SUFFIX}}.tsv"
-            df.to_csv(out_path, sep='\t')
-            logger.info(f"Saved embedding for '{{obsm_key}}' to: {{out_path}}")
-        else:
-            logger.warning(f"obsm['{{obsm_key}}'] not found. Skipping.")
+    output_key_to_save = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+        "output_key",
+        method,
+    )
+
+    # save block in the template  ⬇⬇⬇ only these lines change
+    if output_key_to_save in adata.obsm:
+        df = pd.DataFrame(
+            adata.obsm[output_key_to_save], index=adata.obs_names
+        )
+        out_path = BASE_SAVE_DIR / f"{{output_key_to_save}}_embedding_{{FILE_SUFFIX}}.tsv"
+        df.to_csv(out_path, sep="\t")
+        logger.info(f"Saved embedding for '{{output_key_to_save}}' to: {{out_path}}")
+    else:
+        logger.warning(f"obsm['{{output_key_to_save}}'] not found. Skipping save.")
+
+
 
     # Save performance log
     log_df.insert(0, "method", log_df.index)
@@ -232,6 +245,8 @@ def main():
     parser.add_argument('--mem', default='8G')
     parser.add_argument('--scratch', default='50G')
     parser.add_argument('--runtime', default='01:00:00')
+    parser.add_argument('--verbose', action='store_true',
+                    help="add this flag to enable verbose mode")
     parser.add_argument('--conda_env', default='scenv')
     parser.add_argument('--output_dir', default='./generated_scripts')
     parser.add_argument('--concord_kwargs', default='{}',
@@ -271,6 +286,8 @@ def main():
             manual_device = f'"MANUAL_DEVICE": "{args.device}"'
             manual_device_comma = ','
 
+        verbose_flag = "True" if args.verbose else "False"
+
         py_content = PYTHON_TEMPLATE.format(
             proj_name=args.proj_name,
             adata_filename=args.adata_filename,
@@ -281,7 +298,8 @@ def main():
             manual_device=manual_device,
             manual_device_comma=manual_device_comma,
             latent_dim=args.latent_dim,
-            concord_kwargs_repr=repr(concord_kwargs)
+            concord_kwargs_repr=repr(concord_kwargs),
+            verbose=verbose_flag,
         )
 
         py_path = proj_out_dir / f"{script_name}.py"
@@ -293,7 +311,12 @@ def main():
             scratch=args.scratch,
             runtime=args.runtime,
             conda_env=args.conda_env,
+<<<<<<< HEAD
             # script_path=py_path,
+=======
+            verbose=args.verbose,
+            script_path=py_path,
+>>>>>>> origin
             script_name=script_name,
         )
         sh_path = proj_out_dir / f"{script_name}.sh"
