@@ -1,0 +1,16 @@
+Running on: qb3-atgpu14.wynton.ucsf.edu
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+2025-06-27 14:52:09,973 - INFO - Using device: cuda
+2025-06-27 14:52:10,068 - INFO - Using GPU 0: NVIDIA A40
+2025-06-27 14:52:10,076 - INFO - Logging to: ../../save/cel_packerN2/unintegrated_0627-1451/run.log
+2025-06-27 14:52:10,077 - INFO - Starting integration pipeline...
+2025-06-27 14:52:14,961 - INFO - Loaded AnnData from: ../../data/cel_packerN2/cel_packerN2_preprocessed.h5ad
+2025-06-27 14:52:14,964 - INFO - ✅ All selected methods completed.
+2025-06-27 14:52:14,967 - INFO - Integration complete.
+2025-06-27 14:52:29,299 - INFO - Saved embedding for 'unintegrated' to: ../../save/cel_packerN2/unintegrated_0627-1451/unintegrated_embedding_0627-1451.tsv
+2025-06-27 14:52:29,306 - INFO - Saved performance log to: ../../save/cel_packerN2/unintegrated_0627-1451/benchmark_log_0627-1451.tsv
+2025-06-27 14:52:29,307 - INFO - All tasks finished successfully.
