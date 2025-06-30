@@ -20,9 +20,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)

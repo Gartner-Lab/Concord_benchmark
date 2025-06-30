@@ -15,9 +15,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
@@ -59,7 +64,7 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
-        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 64, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.7, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2_hyperparam', 'tag': 'adc8ef', 'output_key': 'concord_hcl_augmentation_mask_prob-0.7'}
+        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 64, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.7, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2_hyperparam', 'output_key': 'concord_hcl_augmentation_mask_prob-0.7'}
     }
 }
 
