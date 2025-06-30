@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 import json, textwrap
+import re
 
 PYTHON_TEMPLATE = r"""#!/usr/bin/env python
 # coding: utf-8
@@ -250,8 +251,16 @@ def main():
     else:
         concord_kwargs = json.loads(textwrap.dedent(args.concord_kwargs))
 
+    ckw_dict = json.loads(textwrap.dedent(args.concord_kwargs)) if args.concord_kwargs else {}
+    suffix = ckw_dict.get("output_key") or ckw_dict.get("tag")
+    if suffix:
+        suffix = re.sub(r"[^A-Za-z0-9_\-]", "_", suffix)
+        suffix = f"_{suffix}"
+    else:
+        suffix = ""
+
     for method in args.methods:
-        script_name = f"benchmark_{args.proj_name}_{method}"
+        script_name = f"benchmark_{args.proj_name}_{method}{suffix}"
 
         if args.device == 'auto':
             auto_device = "True"
