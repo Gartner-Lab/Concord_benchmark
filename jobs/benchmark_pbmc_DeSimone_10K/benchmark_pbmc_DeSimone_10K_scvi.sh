@@ -8,6 +8,7 @@
 #$ -l mem_free=8G
 #$ -l scratch=50G
 #$ -l h_rt=01:00:00
+#$ -l compute_cap=86
 
 echo "Running on: $(hostname)"
 nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
@@ -18,6 +19,5 @@ module load cuda/11.8
 source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
 conda activate scenv
 
-cd $(dirname ../jobs/benchmark_pbmc_DeSimone_10K/benchmark_pbmc_DeSimone_10K_scvi.py)
 TIMESTAMP=$(date +'%m%d-%H%M')
 python benchmark_pbmc_DeSimone_10K_scvi.py --timestamp $TIMESTAMP

@@ -174,7 +174,8 @@ if __name__ == "__main__":
     main()
 """
 
-SH_TEMPLATE = """#!/bin/bash
+# ------------------ SGE template (Wynton) ------------------
+SH_TEMPLATE_WYNTON = """#!/bin/bash
 #$ -S /bin/bash
 #$ -cwd
 #$ -j y
@@ -199,6 +200,25 @@ TIMESTAMP=$(date +'%m%d-%H%M')
 python {script_name}.py --timestamp $TIMESTAMP
 """
 
+# ------------------ Local/EC2 template ---------------------
+SH_TEMPLATE_LOCAL = """#!/usr/bin/env bash
+set -eo pipefail
+
+echo "Job: {script_name}"
+echo "Start: $(date -Is)"
+echo "Host: $(hostname)"
+nvidia-smi || true
+
+# ---- conda ------------------------------------------------
+source ~/miniconda3/etc/profile.d/conda.sh     # update if conda lives elsewhere
+conda activate {conda_env}
+
+TIMESTAMP=$(date +'%m%d-%H%M')
+python {script_name}.py --timestamp $TIMESTAMP
+
+echo "End: $(date -Is)"
+"""
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--proj_name', required=True)
@@ -215,6 +235,10 @@ def main():
     parser.add_argument('--output_dir', default='./generated_scripts')
     parser.add_argument('--concord_kwargs', default='{}',
                     help="JSON string or @file path with Concord arguments")
+    parser.add_argument('--mode',
+                        choices=['wynton', 'local'],
+                        default='local',
+                        help="wynton = Wynton HPC, local = local machine or AWS EC2")
     args = parser.parse_args()
 
     proj_out_dir = Path(args.output_dir) / f"benchmark_{args.proj_name}"
@@ -254,18 +278,20 @@ def main():
         py_path = proj_out_dir / f"{script_name}.py"
         py_path.write_text(py_content)
 
-        sh_content = SH_TEMPLATE.format(
+        sh_template = SH_TEMPLATE_WYNTON if args.mode == 'wynton' else SH_TEMPLATE_LOCAL
+        sh_content = sh_template.format(
             mem=args.mem,
             scratch=args.scratch,
             runtime=args.runtime,
             conda_env=args.conda_env,
-            script_path=py_path,
+            # script_path=py_path,
             script_name=script_name,
         )
         sh_path = proj_out_dir / f"{script_name}.sh"
         sh_path.write_text(sh_content)
 
-        print(f"✅ Generated: {py_path.relative_to(Path(args.output_dir))}\n✅ Generated: {sh_path.relative_to(Path(args.output_dir))}\n")
+        rel = lambda p: p.relative_to(Path(args.output_dir))
+        print(f"✅ Generated: {rel(py_path)}\n✅ Generated: {rel(sh_path)}\n")
 
 if __name__ == '__main__':
     main()
