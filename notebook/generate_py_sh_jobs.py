@@ -311,12 +311,9 @@ def main():
             scratch=args.scratch,
             runtime=args.runtime,
             conda_env=args.conda_env,
-<<<<<<< HEAD
             # script_path=py_path,
-=======
             verbose=args.verbose,
             script_path=py_path,
->>>>>>> origin
             script_name=script_name,
         )
         sh_path = proj_out_dir / f"{script_name}.sh"

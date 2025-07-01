@@ -15,9 +15,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
@@ -50,7 +55,7 @@ CONFIG = {
         "LATENT_DIM": 50,
         "RETURN_CORRECTED": False,
         "TRANSFORM_BATCH": None,
-        "VERBOSE": True,
+        "VERBOSE": False,
     },
     "UMAP_SETTINGS": {
         "COMPUTE_UMAP": False,
@@ -147,15 +152,23 @@ def main():
     logger.info("Integration complete.")
     
     # Save embeddings
-    methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
-    for obsm_key in methods_to_save:
-        if obsm_key in adata.obsm:
-            df = pd.DataFrame(adata.obsm[obsm_key], index=adata.obs_names)
-            out_path = BASE_SAVE_DIR / f"{obsm_key}_embedding_{FILE_SUFFIX}.tsv"
-            df.to_csv(out_path, sep='\t')
-            logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
-        else:
-            logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
+    output_key_to_save = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+        "output_key",
+        method,
+    )
+
+    # save block in the template  ⬇⬇⬇ only these lines change
+    if output_key_to_save in adata.obsm:
+        df = pd.DataFrame(
+            adata.obsm[output_key_to_save], index=adata.obs_names
+        )
+        out_path = BASE_SAVE_DIR / f"{output_key_to_save}_embedding_{FILE_SUFFIX}.tsv"
+        df.to_csv(out_path, sep="\t")
+        logger.info(f"Saved embedding for '{output_key_to_save}' to: {out_path}")
+    else:
+        logger.warning(f"obsm['{output_key_to_save}'] not found. Skipping save.")
+
+
 
     # Save performance log
     log_df.insert(0, "method", log_df.index)
