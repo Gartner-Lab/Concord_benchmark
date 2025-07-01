@@ -20,4 +20,4 @@ source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/co
 conda activate cellpath
 
 TIMESTAMP=$(date +'%m%d-%H%M')
-python benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-2048.py --timestamp $TIMESTAMP
+python benchmark_cel_packerN2_hyperparam_concord_hcl_concord_hcl_batch_size-1024.py --timestamp $TIMESTAMP
