@@ -64,7 +64,7 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
-        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 2048, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 15, 'save_dir': '../../save/cel_packerN2_hyperparam', 'output_key': 'concord_hcl_batch_size-2048'}
+        "CONCORD_KWARGS": {'latent_dim': 300, 'batch_size': 1024, 'encoder_dims': [1000], 'p_intra_domain': 1.0, 'p_intra_knn': 0.0, 'clr_beta': 1.0, 'augmentation_mask_prob': 0.3, 'clr_temperature': 0.3, 'sampler_knn': 1000, 'n_epochs': 108, 'lr': 0.16, 'save_dir': '../../save/cel_packerN2_hyperparam', 'output_key': 'concord_hcl_batch_size-1024'}
     }
 }
 
@@ -87,8 +87,14 @@ else:
     gpu_name = "CPU"
 
 # ------------------- Paths -------------------
-method = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
-BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{method}_{FILE_SUFFIX}/")
+METHOD = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
+
+OUT_KEY = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+    "output_key",
+    METHOD,
+)
+
+BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{OUT_KEY}_{FILE_SUFFIX}/")
 BASE_DATA_DIR = Path(f"../../data/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,22 +157,16 @@ def main():
     )
     logger.info("Integration complete.")
     
-    # Save embeddings
-    output_key_to_save = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
-        "output_key",
-        method,
-    )
-
     # save block in the template  ⬇⬇⬇ only these lines change
-    if output_key_to_save in adata.obsm:
+    if OUT_KEY in adata.obsm:
         df = pd.DataFrame(
-            adata.obsm[output_key_to_save], index=adata.obs_names
+            adata.obsm[OUT_KEY], index=adata.obs_names
         )
-        out_path = BASE_SAVE_DIR / f"{output_key_to_save}_embedding_{FILE_SUFFIX}.tsv"
+        out_path = BASE_SAVE_DIR / f"{OUT_KEY}_embedding_{FILE_SUFFIX}.tsv"
         df.to_csv(out_path, sep="\t")
-        logger.info(f"Saved embedding for '{output_key_to_save}' to: {out_path}")
+        logger.info(f"Saved embedding for '{OUT_KEY}' to: {out_path}")
     else:
-        logger.warning(f"obsm['{output_key_to_save}'] not found. Skipping save.")
+        logger.warning(f"obsm['{OUT_KEY}'] not found. Skipping save.")
 
 
 
