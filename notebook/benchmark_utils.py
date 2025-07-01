@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 import pandas as pd
 from anndata import AnnData
+from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection
 import concord as ccd
 from typing import Optional
 
@@ -72,9 +73,8 @@ def collect_benchmark_logs(proj_name: str, methods: list[str]) -> pd.DataFrame:
         if not log_tsv.exists():
             print(f"[⚠️ Warning] missing {log_tsv}")
             continue
-        log_res = pd.read_csv(log_tsv, sep="\t")
-        log_res['method'] = m
-        rows.append(log_res)
+
+        rows.append(pd.read_csv(log_tsv, sep="\t"))
 
     if not rows:
         raise RuntimeError("No benchmark logs were read.")
@@ -92,7 +92,6 @@ from typing import Optional
 def plot_benchmark_performance(
         bench_df: pd.DataFrame,
         title: str = None,
-        fontsize: int = 8,
         figsize: tuple[int, int] = (12, 4),
         dpi: int = 300,
         save_path: Optional[Path] = None,
@@ -138,11 +137,11 @@ def plot_benchmark_performance(
                 for ypos, val, meth in zip(y, vals, df["method"]):
                     if meth in cpu_methods:
                         ax.text(val + text_offset, ypos, "CPU only",
-                                va="center", fontsize=fontsize, color="black")
+                                va="center", fontsize=8, color="black")
 
         axes[0].set_ylabel("Integration Method")
         if title:
-            fig.suptitle(title, fontsize=fontsize, fontweight="bold")
+            fig.suptitle(title, fontsize=16, fontweight="bold")
         plt.tight_layout()
 
         if save_path:
@@ -151,3 +150,36 @@ def plot_benchmark_performance(
 
 
 
+
+
+def run_scib_benchmark(
+    adata: AnnData,
+    embedding_keys: list,
+    batch_key: str = "batch",
+    label_key: str = "cell_type",
+    n_jobs: int = 4,
+) -> Benchmarker:
+    """
+    Run scib-metrics benchmark on given embeddings.
+
+    Parameters:
+    - adata: AnnData object with embeddings in .obsm
+    - embedding_keys: list of .obsm keys to evaluate (e.g. ['Harmony', 'scVI', 'Concord'])
+    - batch_key: obs column for batch
+    - label_key: obs column for cell type labels
+    - n_jobs: number of CPU cores to use (-1 = all cores, default = 4)
+
+    Returns:
+    - Benchmarker object (use .get_results() or .plot_results_table())
+    """
+    bm = Benchmarker(
+        adata=adata,
+        batch_key=batch_key,
+        label_key=label_key,
+        bio_conservation_metrics=BioConservation(),
+        batch_correction_metrics=BatchCorrection(),
+        embedding_obsm_keys=embedding_keys,
+        n_jobs=n_jobs,
+    )
+    bm.benchmark()
+    return bm
