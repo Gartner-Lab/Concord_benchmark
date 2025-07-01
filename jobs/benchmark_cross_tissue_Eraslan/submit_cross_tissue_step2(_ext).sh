@@ -10,5 +10,5 @@
 source ~/.bashrc
 conda activate scenv
 
-python ../notebook/benchmark_cross_tissue_Eraslan_step2_extend.py
+python ../../notebook/benchmark_cross_tissue_Eraslan_step2_extend.py
 

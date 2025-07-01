@@ -27,6 +27,6 @@ mkdir -p "$LOG_DIR"
 exec > >(tee -a "${LOG_DIR}/job_${JOB_ID}.log") 2>&1
 
 # -------- Run Step 1 --------
-python ../notebook/benchmark_cross_tissue_Eraslan_step1.py
+python ../../notebook/benchmark_cross_tissue_Eraslan_step1.py
 
 echo "✅ Step 1 finished at $(date)"
