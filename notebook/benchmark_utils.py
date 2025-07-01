@@ -3,8 +3,6 @@ import re
 from pathlib import Path
 import pandas as pd
 from anndata import AnnData
-from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection
-import concord as ccd
 from typing import Optional
 
 
@@ -151,35 +149,3 @@ def plot_benchmark_performance(
 
 
 
-
-def run_scib_benchmark(
-    adata: AnnData,
-    embedding_keys: list,
-    batch_key: str = "batch",
-    label_key: str = "cell_type",
-    n_jobs: int = 4,
-) -> Benchmarker:
-    """
-    Run scib-metrics benchmark on given embeddings.
-
-    Parameters:
-    - adata: AnnData object with embeddings in .obsm
-    - embedding_keys: list of .obsm keys to evaluate (e.g. ['Harmony', 'scVI', 'Concord'])
-    - batch_key: obs column for batch
-    - label_key: obs column for cell type labels
-    - n_jobs: number of CPU cores to use (-1 = all cores, default = 4)
-
-    Returns:
-    - Benchmarker object (use .get_results() or .plot_results_table())
-    """
-    bm = Benchmarker(
-        adata=adata,
-        batch_key=batch_key,
-        label_key=label_key,
-        bio_conservation_metrics=BioConservation(),
-        batch_correction_metrics=BatchCorrection(),
-        embedding_obsm_keys=embedding_keys,
-        n_jobs=n_jobs,
-    )
-    bm.benchmark()
-    return bm
