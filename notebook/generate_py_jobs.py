@@ -1,3 +1,17 @@
+"""
+Generate benchmark *.py and submission *.sh wrappers.
+
+Usage
+-----
+python generate_py_sh_jobs.py \
+  --proj_name lung_SM \
+  --adata_filename submucosal.h5ad \
+  --methods scanorama harmony \
+  --batch_key donor_id \
+  --state_key cell_type \
+  --mode wynton          # or: local
+"""
+
 import argparse
 from pathlib import Path
 import json, textwrap
@@ -188,7 +202,7 @@ if __name__ == "__main__":
     main()
 """
 
-SH_TEMPLATE = """#!/bin/bash
+SH_TEMPLATE_WYNTON = """#!/bin/bash
 #$ -S /bin/bash
 #$ -cwd
 #$ -j y
@@ -205,8 +219,20 @@ nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
 
 module load cuda/11.8
 
-# Initialize conda and activate environment
 source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate {conda_env}
+
+TIMESTAMP=$(date +'%m%d-%H%M')
+python {script_name}.py --timestamp $TIMESTAMP
+"""
+
+SH_TEMPLATE_LOCAL = """#!/usr/bin/env bash
+set -eo pipefail
+
+echo "Running on: $(hostname)"
+nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
+
+source ~/.bashrc
 conda activate {conda_env}
 
 TIMESTAMP=$(date +'%m%d-%H%M')
@@ -231,6 +257,9 @@ def main():
     parser.add_argument('--output_dir', default='./generated_scripts')
     parser.add_argument('--concord_kwargs', default='{}',
                     help="JSON string or @file path with Concord arguments")
+    parser.add_argument('--mode', default='local', choices=['wynton', 'local'],
+                        help="Generate SGE submission script (wynton) "
+                             "or a plain bash launcher (local/AWS)")
     args = parser.parse_args()
 
     proj_out_dir = Path(args.output_dir) / f"benchmark_{args.proj_name}"
@@ -281,7 +310,8 @@ def main():
         py_path = proj_out_dir / f"{script_name}.py"
         py_path.write_text(py_content)
 
-        sh_content = SH_TEMPLATE.format(
+        sh_template = SH_TEMPLATE_WYNTON if args.mode == 'wynton' else SH_TEMPLATE_LOCAL
+        sh_content = sh_template.format(
             mem=args.mem,
             scratch=args.scratch,
             runtime=args.runtime,
