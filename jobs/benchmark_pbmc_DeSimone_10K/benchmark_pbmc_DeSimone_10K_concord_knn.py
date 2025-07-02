@@ -15,9 +15,14 @@ import argparse
 
 # ------------------- Argument Parsing -------------------
 parser = argparse.ArgumentParser()
-parser.add_argument('--timestamp', required=True)
+parser.add_argument(
+    "--timestamp",
+    help="optional run-suffix; if omitted, auto-generate",
+)
 args = parser.parse_args()
-FILE_SUFFIX = args.timestamp
+
+import time as _t
+FILE_SUFFIX = args.timestamp or _t.strftime("%m%d-%H%M")
 
 # ------------------- Logger Setup -------------------
 logger = logging.getLogger(__name__)
@@ -40,9 +45,15 @@ CONFIG = {
         
     },
     "DATA_SETTINGS": {
+<<<<<<< HEAD:jobs/benchmark_pbmc_DeSimone_10K/benchmark_pbmc_DeSimone_10K_concord_knn.py
         "ADATA_FILENAME": "template_pbmc_10K_preprocessed.h5ad",
         "BATCH_KEY": "dataset",
         "STATE_KEY": "cell_type",
+=======
+        "ADATA_FILENAME": "cross_tissue_Eraslan_preprocessed_HVG.h5ad",
+        "BATCH_KEY": "batch",
+        "STATE_KEY": "None",
+>>>>>>> origin:jobs/benchmark_cross_tissue_Eraslan/benchmark_cross_tissue_Eraslan_concord_knn.py
         "COUNT_LAYER": "counts",
     },
     "INTEGRATION_SETTINGS": {
@@ -59,7 +70,11 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
+<<<<<<< HEAD:jobs/benchmark_pbmc_DeSimone_10K/benchmark_pbmc_DeSimone_10K_concord_knn.py
         "CONCORD_KWARGS": {}
+=======
+        "CONCORD_KWARGS": {'save_dir': '../../save/cross_tissue_Eraslan'}
+>>>>>>> origin:jobs/benchmark_cross_tissue_Eraslan/benchmark_cross_tissue_Eraslan_concord_knn.py
     }
 }
 
@@ -82,8 +97,14 @@ else:
     gpu_name = "CPU"
 
 # ------------------- Paths -------------------
-method = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
-BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{method}_{FILE_SUFFIX}/")
+METHOD = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
+
+OUT_KEY = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+    "output_key",
+    METHOD,
+)
+
+BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{OUT_KEY}_{FILE_SUFFIX}/")
 BASE_DATA_DIR = Path(f"../../data/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -146,6 +167,7 @@ def main():
     )
     logger.info("Integration complete.")
     
+<<<<<<< HEAD:jobs/benchmark_pbmc_DeSimone_10K/benchmark_pbmc_DeSimone_10K_concord_knn.py
     # Save embeddings
     methods_to_save = CONFIG["INTEGRATION_SETTINGS"]["METHODS"]
     for obsm_key in methods_to_save:
@@ -156,6 +178,20 @@ def main():
             logger.info(f"Saved embedding for '{obsm_key}' to: {out_path}")
         else:
             logger.warning(f"obsm['{obsm_key}'] not found. Skipping.")
+=======
+    # save block in the template  ⬇⬇⬇ only these lines change
+    if OUT_KEY in adata.obsm:
+        df = pd.DataFrame(
+            adata.obsm[OUT_KEY], index=adata.obs_names
+        )
+        out_path = BASE_SAVE_DIR / f"{OUT_KEY}_embedding_{FILE_SUFFIX}.tsv"
+        df.to_csv(out_path, sep="\t")
+        logger.info(f"Saved embedding for '{OUT_KEY}' to: {out_path}")
+    else:
+        logger.warning(f"obsm['{OUT_KEY}'] not found. Skipping save.")
+
+
+>>>>>>> origin:jobs/benchmark_cross_tissue_Eraslan/benchmark_cross_tissue_Eraslan_concord_knn.py
 
     # Save performance log
     log_df.insert(0, "method", log_df.index)
