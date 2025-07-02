@@ -47,7 +47,11 @@ CONFIG = {
     "DATA_SETTINGS": {
         "ADATA_FILENAME": "dkd_Wilson_preprocessed.h5ad",
         "BATCH_KEY": "donor_id",
+<<<<<<< HEAD
         "STATE_KEY": "cell_type",
+=======
+        "STATE_KEY": "None",
+>>>>>>> origin
         "COUNT_LAYER": "counts",
     },
     "INTEGRATION_SETTINGS": {
@@ -55,7 +59,11 @@ CONFIG = {
         "LATENT_DIM": 50,
         "RETURN_CORRECTED": False,
         "TRANSFORM_BATCH": None,
+<<<<<<< HEAD
         "VERBOSE": False,
+=======
+        "VERBOSE": True,
+>>>>>>> origin
     },
     "UMAP_SETTINGS": {
         "COMPUTE_UMAP": False,
@@ -64,7 +72,11 @@ CONFIG = {
         "MIN_DIST": 0.1,
     },
     "CONCORD_SETTINGS": {
+<<<<<<< HEAD
         "CONCORD_KWARGS": {}
+=======
+        "CONCORD_KWARGS": {'save_dir': '../../save/dkd_Wilson'}
+>>>>>>> origin
     }
 }
 
@@ -87,8 +99,19 @@ else:
     gpu_name = "CPU"
 
 # ------------------- Paths -------------------
+<<<<<<< HEAD
 method = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
 BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{method}_{FILE_SUFFIX}/")
+=======
+METHOD = CONFIG["INTEGRATION_SETTINGS"]["METHODS"][0]
+
+OUT_KEY = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
+    "output_key",
+    METHOD,
+)
+
+BASE_SAVE_DIR = Path(f"../../save/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/{OUT_KEY}_{FILE_SUFFIX}/")
+>>>>>>> origin
 BASE_DATA_DIR = Path(f"../../data/{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,6 +174,7 @@ def main():
     )
     logger.info("Integration complete.")
     
+<<<<<<< HEAD
     # Save embeddings
     output_key_to_save = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
         "output_key",
@@ -167,6 +191,18 @@ def main():
         logger.info(f"Saved embedding for '{output_key_to_save}' to: {out_path}")
     else:
         logger.warning(f"obsm['{output_key_to_save}'] not found. Skipping save.")
+=======
+    # save block in the template  ⬇⬇⬇ only these lines change
+    if OUT_KEY in adata.obsm:
+        df = pd.DataFrame(
+            adata.obsm[OUT_KEY], index=adata.obs_names
+        )
+        out_path = BASE_SAVE_DIR / f"{OUT_KEY}_embedding_{FILE_SUFFIX}.tsv"
+        df.to_csv(out_path, sep="\t")
+        logger.info(f"Saved embedding for '{OUT_KEY}' to: {out_path}")
+    else:
+        logger.warning(f"obsm['{OUT_KEY}'] not found. Skipping save.")
+>>>>>>> origin
 
 
 
