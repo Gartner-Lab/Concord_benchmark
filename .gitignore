@@ -19,6 +19,8 @@ resources/
 
 # ignore folder notebook_private
 
+# ignore all folders in jobs/
+jobs/*/
 
 # Ignore specific notebooks
 notebook/waddington_simulation.ipynb
@@ -28,3 +30,6 @@ notebook/waddington_simulation2.ipynb
 notebook/concord_Huycke_cc.ipynb
 notebook/concord_fish_embryogenesis.ipynb__pycache__/
 jobs/
+
+*.pyc
+__pycache__/
