@@ -1,23 +1,11 @@
-#!/bin/bash
-#$ -S /bin/bash
-#$ -cwd
-#$ -j y
-#$ -r y
-#$ -q gpu.q
-#$ -pe smp 1
-#$ -l mem_free=8G
-#$ -l scratch=50G
-#$ -l h_rt=01:00:00
+#!/usr/bin/env bash
+set -eo pipefail
 
 echo "Running on: $(hostname)"
-nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv
+nvidia-smi --query-gpu=index,name,memory.total,driver_version --format=csv || true
 
-module load cuda/11.8
+source ~/.bashrc
+conda activate concord_env
 
-# Initialize conda and activate environment
-source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
-conda activate scenv
-
-cd $(dirname ../jobs/benchmark_pancreatic_islet_Hrovatin/benchmark_pancreatic_islet_Hrovatin_liger.py)
 TIMESTAMP=$(date +'%m%d-%H%M')
 python benchmark_pancreatic_islet_Hrovatin_liger.py --timestamp $TIMESTAMP
