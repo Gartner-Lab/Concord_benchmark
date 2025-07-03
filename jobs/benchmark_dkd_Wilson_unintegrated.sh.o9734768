@@ -1,0 +1,24 @@
+Running on: qb3-atgpu24
+index, name, memory.total [MiB], driver_version
+0, NVIDIA A40, 46068 MiB, 550.127.05
+1, NVIDIA A40, 46068 MiB, 550.127.05
+2, NVIDIA A40, 46068 MiB, 550.127.05
+3, NVIDIA A40, 46068 MiB, 550.127.05
+/wynton/group/gartner/zuzhi/.conda/envs/scenv/lib/python3.13/site-packages/louvain/__init__.py:54: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import get_distribution, DistributionNotFound
+2025-06-27 00:42:34,540 - INFO - Using device: cuda
+2025-06-27 00:42:34,643 - INFO - Using GPU 0: NVIDIA A40
+2025-06-27 00:42:34,650 - INFO - Logging to: ../../save/dkd_Wilson/unintegrated_0627-0042/run.log
+2025-06-27 00:42:34,651 - INFO - Starting integration pipeline...
+2025-06-27 00:42:36,137 - INFO - Loaded AnnData from: ../../data/dkd_Wilson/dkd_Wilson_preprocessed.h5ad
+2025-06-27 00:42:36,140 - INFO - Traceback (most recent call last):
+2025-06-27 00:42:36,142 - INFO -   File "/wynton/group/gartner/zuzhi/Concord_benchmark/jobs/benchmark_dkd_Wilson/benchmark_dkd_Wilson_unintegrated.py", line 170, in <module>
+2025-06-27 00:42:36,143 - INFO -     main()
+2025-06-27 00:42:36,144 - INFO -     ~~~~^^
+2025-06-27 00:42:36,145 - INFO -   File "/wynton/group/gartner/zuzhi/Concord_benchmark/jobs/benchmark_dkd_Wilson/benchmark_dkd_Wilson_unintegrated.py", line 129, in main
+2025-06-27 00:42:36,145 - INFO -     log_df = ccd.bm.run_integration_methods_pipeline(
+2025-06-27 00:42:36,146 - INFO -         adata=adata,
+2025-06-27 00:42:36,147 - INFO -     ...<14 lines>...
+2025-06-27 00:42:36,148 - INFO -         concord_kwargs=CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"]
+2025-06-27 00:42:36,149 - INFO -     )
+2025-06-27 00:42:36,150 - INFO - TypeError: run_integration_methods_pipeline() got an unexpected keyword argument 'concord_kwargs'
