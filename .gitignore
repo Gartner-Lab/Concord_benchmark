@@ -19,6 +19,8 @@ resources/
 
 # ignore folder notebook_private
 
+# ignore all folders in jobs/
+jobs/*/
 
 # Ignore specific notebooks
 notebook/waddington_simulation.ipynb
