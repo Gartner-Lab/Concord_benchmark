@@ -72,7 +72,10 @@ def collect_benchmark_logs(proj_name: str, methods: list[str]) -> pd.DataFrame:
             print(f"[⚠️ Warning] missing {log_tsv}")
             continue
 
-        rows.append(pd.read_csv(log_tsv, sep="\t"))
+        df = pd.read_csv(log_tsv, sep="\t")
+        df["method"] = m
+
+        rows.append(df)
 
     if not rows:
         raise RuntimeError("No benchmark logs were read.")
