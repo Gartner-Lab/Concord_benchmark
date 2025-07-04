@@ -151,6 +151,8 @@ def plot_benchmark_performance(
 
 
 
+import concord as ccd
+
 def compute_umap_and_save(
     adata: AnnData,
     methods: list[str],
@@ -158,11 +160,13 @@ def compute_umap_and_save(
     file_suffix: str,
     data_dir: Path,
     file_name: str,
-    seed: int = 42
+    seed: int = 42,
+    overwrite: bool = True
 ):
     """
-    For each method in `methods`, compute 2D and 3D UMAP from adata.obsm[method]
-    unless they already exist. Saves the embeddings and final AnnData object.
+    For each method in `methods`, compute 2D and 3D UMAP from adata.obsm[method].
+    If overwrite is True, existing UMAPs will be recomputed. Otherwise, they will be skipped.
+    Saves both obsm (.h5) and final AnnData object (.h5ad).
 
     Parameters
     ----------
@@ -180,15 +184,30 @@ def compute_umap_and_save(
         Filename prefix (without .h5ad) for saving the final AnnData.
     seed : int
         Random seed for UMAP reproducibility.
+    overwrite : bool
+        If True, existing UMAP keys will be recomputed. If False, they will be skipped.
     """
-    import concord as ccd
+    save_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    
     for method in methods:
+        if method not in adata.obsm:
+            print(f"[❌ Skipping] adata.obsm['{method}'] not found — cannot compute UMAP")
+            continue
+
         for dim in [2, 3]:
             key = f"{method}_UMAP" + ("_3D" if dim == 3 else "")
+
             if key in adata.obsm:
-                print(f"[⚠️ Warning] obsm['{key}'] already exists, skipping UMAP")
-                continue
-            print(f"🔄 Computing {dim}D UMAP for {method}...")
+                if overwrite:
+                    print(f"[⚠️ Notice] obsm['{key}'] already exists — recomputing and updating it")
+                else:
+                    print(f"[⏭️ Skipping] obsm['{key}'] already exists — skipping (overwrite=False)")
+                    continue
+            else:
+                print(f"🔄 Computing {dim}D UMAP for {method}...")
+
+            # Compute UMAP regardless (if overwrite=True or not previously computed)
             ccd.ul.run_umap(
                 adata,
                 source_key=method,
@@ -199,11 +218,12 @@ def compute_umap_and_save(
                 metric="euclidean",
                 random_state=seed
             )
-            print(f"✅ obsm['{key}'] computed")
+            print(f"✅ obsm['{key}'] updated")
+
     obsm_path = save_dir / f"obsm_{file_suffix}.h5"
     ccd.ul.save_obsm_to_hdf5(adata, obsm_path)
     print(f"💾 obsm saved to {obsm_path}")
+
     final_path = data_dir / f"{file_name}_final.h5ad"
     adata.write_h5ad(final_path)
     print(f"💾 Final AnnData saved to: {final_path}")
-
