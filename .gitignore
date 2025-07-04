@@ -33,3 +33,5 @@ jobs/
 
 *.pyc
 __pycache__/
+*.pyc
+__pycache__/
