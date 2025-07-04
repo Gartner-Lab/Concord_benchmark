@@ -148,4 +148,59 @@ def plot_benchmark_performance(
 
 
 
+def compute_umap_and_save(
+    adata: AnnData,
+    methods: list[str],
+    save_dir: Path,
+    file_suffix: str,
+    data_dir: Path,
+    file_name: str,
+    seed: int = 42
+):
+    """
+    For each method in `methods`, compute 2D and 3D UMAP from adata.obsm[method]
+    unless they already exist. Saves the embeddings and final AnnData object.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix with integration embeddings.
+    methods : list of str
+        List of integration method names to compute UMAP from.
+    save_dir : Path
+        Directory to save obsm h5 file.
+    file_suffix : str
+        Timestamp or suffix used in saving obsm files.
+    data_dir : Path
+        Directory to save final .h5ad output.
+    file_name : str
+        Filename prefix (without .h5ad) for saving the final AnnData.
+    seed : int
+        Random seed for UMAP reproducibility.
+    """
+    import concord as ccd
+    for method in methods:
+        for dim in [2, 3]:
+            key = f"{method}_UMAP" + ("_3D" if dim == 3 else "")
+            if key in adata.obsm:
+                print(f"[⚠️ Warning] obsm['{key}'] already exists, skipping UMAP")
+                continue
+            print(f"🔄 Computing {dim}D UMAP for {method}...")
+            ccd.ul.run_umap(
+                adata,
+                source_key=method,
+                result_key=key,
+                n_components=dim,
+                n_neighbors=30,
+                min_dist=0.1,
+                metric="euclidean",
+                random_state=seed
+            )
+            print(f"✅ obsm['{key}'] computed")
+    obsm_path = save_dir / f"obsm_{file_suffix}.h5"
+    ccd.ul.save_obsm_to_hdf5(adata, obsm_path)
+    print(f"💾 obsm saved to {obsm_path}")
+    final_path = data_dir / f"{file_name}_final.h5ad"
+    adata.write_h5ad(final_path)
+    print(f"💾 Final AnnData saved to: {final_path}")
 
