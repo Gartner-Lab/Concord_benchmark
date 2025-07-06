@@ -64,28 +64,33 @@ seu  <- CreateSeuratObject(
 seu.list <- SplitObject(seu, split.by = BATCH_KEY)
 seu.list <- lapply(seu.list, NormalizeData, verbose = FALSE)
 
-anchor_feats <- rownames(seu)        # use all genes
+hvgs <- rownames(seu)        # use all genes
 
 ## ───────────── Integration with RAM profiling ─────────────
 ram_res <- peakRAM({{
   if (grepl("rpca",  METHOD)) {{
     seu.list <- lapply(seu.list, function(x) {{
-      x <- ScaleData(x, features = anchor_feats, verbose = FALSE)
-      x <- RunPCA(x,  features = anchor_feats,
+      x <- ScaleData(x, features = hvgs, verbose = FALSE)
+      x <- RunPCA(x,  features = hvgs,
                   npcs = LATENT_DIM, verbose = FALSE)
       x                                    # return
     }})
     anchors <- FindIntegrationAnchors(
-        seu.list, anchor.features = anchor_feats,
+        seu.list, anchor.features = length(hvgs),
         reduction = "rpca", dims = 1:LATENT_DIM)
   }} else if (grepl("cca", METHOD)) {{
     anchors <- FindIntegrationAnchors(
-        seu.list, anchor.features = anchor_feats,
+        seu.list, anchor.features = length(hvgs),
         reduction = "cca",  dims = 1:LATENT_DIM)
   }} else {{
     stop(paste("Unsupported METHOD:", METHOD))
   }}
+  saveRDS(anchors,
+          file = file.path(SAVE_DIR,
+                           paste0("seurat_anchors_", METHOD, "_", FILE_SUFFIX, ".rds")))
+  cat("✔  Anchors saved to", SAVE_DIR, "\n")
   integrated <<- IntegrateData(anchors, dims = 1:LATENT_DIM)
+  cat("✔  Integration complete\n")
 }})
 
 elapsed_sec <- ram_res$Elapsed_Time_sec
