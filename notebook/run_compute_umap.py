@@ -18,8 +18,8 @@ args = parser.parse_args()
 
 # ───────────── Setup paths and seed ─────────────
 proj_name = args.proj_name
-data_root = Path(f"../data/{proj_name}")
-save_root = Path(f"../save/{proj_name}")
+data_root = Path(f"../../data/{proj_name}")
+save_root = Path(f"../../save/{proj_name}")
 save_root.mkdir(parents=True, exist_ok=True)
 
 seed = 0
