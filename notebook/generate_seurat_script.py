@@ -34,7 +34,11 @@ suppressPackageStartupMessages({{
   library(optparse)
   library(peakRAM)
   library(readr)        # write_tsv()
+  library(future)
 }})
+
+plan(sequential)
+options(future.globals.maxSize = 120 * 1024^3)
 
 ## ───────────── CLI ─────────────
 opt <- parse_args(OptionParser(option_list = list(
