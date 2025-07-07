@@ -204,7 +204,9 @@ if __name__ == "__main__":
     main()
 """
 
-SH_TEMPLATE_WYNTON = """#!/bin/bash
+GPU_METHOD_KEYWORDS = ("scvi", "concord", "contrastive", "harmony", "scanvi")
+
+SH_TEMPLATE_WYNTON_GPU = """#!/bin/bash
 #$ -S /bin/bash
 #$ -cwd
 #$ -j y
@@ -227,6 +229,27 @@ conda activate {conda_env}
 TIMESTAMP=$(date +'%m%d-%H%M')
 python {script_name}.py --timestamp $TIMESTAMP
 """
+
+
+SH_TEMPLATE_WYNTON_CPU = """#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -j y
+#$ -r y
+#$ -pe smp 1
+#$ -l mem_free={mem}
+#$ -l scratch={scratch}
+#$ -l h_rt={runtime}
+
+echo "Running on: $(hostname)"
+
+source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate {conda_env}
+
+TIMESTAMP=$(date +'%m%d-%H%M')
+python {script_name}.py --timestamp $TIMESTAMP
+"""
+
 
 SH_TEMPLATE_LOCAL = """#!/usr/bin/env bash
 set -eo pipefail
@@ -302,6 +325,12 @@ def main():
 
         verbose_flag = "True" if args.verbose else "False"
 
+        if args.mode == "wynton":
+            needs_gpu = any(k in method.lower() for k in GPU_METHOD_KEYWORDS)
+            sh_template = SH_TEMPLATE_WYNTON_GPU if needs_gpu else SH_TEMPLATE_WYNTON_CPU
+        else:                              # local / AWS
+            sh_template = SH_TEMPLATE_LOCAL
+
         py_content = PYTHON_TEMPLATE.format(
             proj_name=args.proj_name,
             adata_filename=args.adata_filename,
@@ -321,7 +350,6 @@ def main():
         py_path = proj_out_dir / f"{script_name}.py"
         py_path.write_text(py_content)
 
-        sh_template = SH_TEMPLATE_WYNTON if args.mode == 'wynton' else SH_TEMPLATE_LOCAL
         sh_content = sh_template.format(
             mem=args.mem,
             scratch=args.scratch,

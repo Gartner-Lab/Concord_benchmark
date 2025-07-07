@@ -23,3 +23,5 @@ resources/
 jobs/*/
 
 # Ignore specific notebooks
+notebook/concord_Huycke_cc.ipynb
+notebook/waddington_simulation2.ipynb
