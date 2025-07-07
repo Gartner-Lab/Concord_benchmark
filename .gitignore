@@ -23,11 +23,8 @@ resources/
 jobs/*/
 
 # Ignore specific notebooks
-notebook/waddington_simulation.ipynb
-notebook/concord_CBCE_run.ipynb
-notebook/concord_Huycke_paper.ipynb
-notebook/waddington_simulation2.ipynb
 notebook/concord_Huycke_cc.ipynb
+<<<<<<< HEAD
 notebook/concord_fish_embryogenesis.ipynb__pycache__/
 jobs/
 
@@ -35,3 +32,6 @@ jobs/
 __pycache__/
 *.pyc
 __pycache__/
+=======
+notebook/waddington_simulation2.ipynb
+>>>>>>> origin

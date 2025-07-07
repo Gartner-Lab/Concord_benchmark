@@ -113,8 +113,8 @@ OUT_KEY = CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"].get(
     METHOD,
 )
 
-BASE_SAVE_DIR = Path(f"../../save/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/{{OUT_KEY}}_{{FILE_SUFFIX}}/")
-BASE_DATA_DIR = Path(f"../../data/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/")
+BASE_SAVE_DIR = Path(f"{root_save_dir}/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/{{OUT_KEY}}_{{FILE_SUFFIX}}/")
+BASE_DATA_DIR = Path(f"{root_data_dir}/{{CONFIG['GENERAL_SETTINGS']['PROJ_NAME']}}/")
 BASE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 BASE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -156,6 +156,7 @@ def main():
         logger.error(f"Error loading AnnData: {{e}}")
         return
 
+    CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"]["save_dir"] = str(BASE_SAVE_DIR)
     log_df = ccd.bm.run_integration_methods_pipeline(
         adata=adata,
         methods=CONFIG["INTEGRATION_SETTINGS"]["METHODS"],
@@ -172,7 +173,8 @@ def main():
         umap_n_neighbors=CONFIG["UMAP_SETTINGS"]["N_NEIGHBORS"],
         umap_min_dist=CONFIG["UMAP_SETTINGS"]["MIN_DIST"],
         verbose=CONFIG["INTEGRATION_SETTINGS"]["VERBOSE"],
-        concord_kwargs=CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"]
+        concord_kwargs=CONFIG["CONCORD_SETTINGS"]["CONCORD_KWARGS"],
+        save_dir=BASE_SAVE_DIR,
     )
     logger.info("Integration complete.")
     
@@ -202,7 +204,9 @@ if __name__ == "__main__":
     main()
 """
 
-SH_TEMPLATE_WYNTON = """#!/bin/bash
+GPU_METHOD_KEYWORDS = ("scvi", "concord", "contrastive", "harmony", "scanvi")
+
+SH_TEMPLATE_WYNTON_GPU = """#!/bin/bash
 #$ -S /bin/bash
 #$ -cwd
 #$ -j y
@@ -225,6 +229,27 @@ conda activate {conda_env}
 TIMESTAMP=$(date +'%m%d-%H%M')
 python {script_name}.py --timestamp $TIMESTAMP
 """
+
+
+SH_TEMPLATE_WYNTON_CPU = """#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -j y
+#$ -r y
+#$ -pe smp 1
+#$ -l mem_free={mem}
+#$ -l scratch={scratch}
+#$ -l h_rt={runtime}
+
+echo "Running on: $(hostname)"
+
+source /wynton/home/cbi/shared/software/CBI/miniforge3-24.3.0-0/etc/profile.d/conda.sh
+conda activate {conda_env}
+
+TIMESTAMP=$(date +'%m%d-%H%M')
+python {script_name}.py --timestamp $TIMESTAMP
+"""
+
 
 SH_TEMPLATE_LOCAL = """#!/usr/bin/env bash
 set -eo pipefail
@@ -260,6 +285,12 @@ def main():
     parser.add_argument('--mode', default='local', choices=['wynton', 'local'],
                         help="Generate SGE submission script (wynton) "
                              "or a plain bash launcher (local/AWS)")
+    
+    parser.add_argument('--root_save_dir', default='../../save',
+                        help="Top-level folder for all output (default: ../../save)")
+    parser.add_argument('--root_data_dir', default='../../data',
+                        help="Top-level folder for all input AnnData (default: ../../data)")
+
     args = parser.parse_args()
 
     proj_out_dir = Path(args.output_dir) / f"benchmark_{args.proj_name}"
@@ -270,6 +301,7 @@ def main():
         concord_kwargs = json.loads(Path(args.concord_kwargs[1:]).read_text())
     else:
         concord_kwargs = json.loads(textwrap.dedent(args.concord_kwargs))
+
 
     ckw_dict = json.loads(textwrap.dedent(args.concord_kwargs)) if args.concord_kwargs else {}
     suffix = ckw_dict.get("output_key") or ckw_dict.get("tag")
@@ -293,6 +325,12 @@ def main():
 
         verbose_flag = "True" if args.verbose else "False"
 
+        if args.mode == "wynton":
+            needs_gpu = any(k in method.lower() for k in GPU_METHOD_KEYWORDS)
+            sh_template = SH_TEMPLATE_WYNTON_GPU if needs_gpu else SH_TEMPLATE_WYNTON_CPU
+        else:                              # local / AWS
+            sh_template = SH_TEMPLATE_LOCAL
+
         py_content = PYTHON_TEMPLATE.format(
             proj_name=args.proj_name,
             adata_filename=args.adata_filename,
@@ -305,12 +343,13 @@ def main():
             latent_dim=args.latent_dim,
             concord_kwargs_repr=repr(concord_kwargs),
             verbose=verbose_flag,
+            root_save_dir=args.root_save_dir.rstrip("/"),
+            root_data_dir=args.root_data_dir.rstrip("/"),
         )
 
         py_path = proj_out_dir / f"{script_name}.py"
         py_path.write_text(py_content)
 
-        sh_template = SH_TEMPLATE_WYNTON if args.mode == 'wynton' else SH_TEMPLATE_LOCAL
         sh_content = sh_template.format(
             mem=args.mem,
             scratch=args.scratch,

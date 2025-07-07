@@ -45,11 +45,16 @@ def add_embeddings(adata: AnnData, proj_name: str, methods: list[str]) -> AnnDat
             continue
 
         df = pd.read_csv(embedding_file, sep="\t", index_col=0)
-        if not df.index.equals(adata.obs_names):
-            print(f"[❌ Error] obs_names mismatch for {method}")
+        if set(df.index) != set(adata.obs_names):
+            print(f"[❌ Error] Cell IDs mismatch for {method}")
             continue
 
-        adata.obsm[f"{method}"] = df.values
+        # 2️⃣— reorder df to match the order in adata.obs_names
+        df = df.reindex(adata.obs_names)
+        #  (reindex preserves the existing order in adata and raises if any ID is missing)
+
+        # now it’s safe to attach the matrix
+        adata.obsm[method] = df.values
         print(f"✅ obsm['{method}'] loaded")
 
     return adata
