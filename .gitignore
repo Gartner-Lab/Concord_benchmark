@@ -24,4 +24,11 @@ jobs/*/
 
 # Ignore specific notebooks
 notebook/concord_Huycke_cc.ipynb
+notebook/concord_fish_embryogenesis.ipynb__pycache__/
+jobs/
+
+*.pyc
+__pycache__/
+*.pyc
+__pycache__/
 notebook/waddington_simulation2.ipynb
