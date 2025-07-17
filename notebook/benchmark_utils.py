@@ -112,6 +112,8 @@ def plot_benchmark_performance(
         dpi: int = 300,
         save_path: Optional[Path] = None,
         rc: dict | None = None,
+        label_fontsize: int = 10,
+        tick_fontsize: int = 8,
 ):
     import numpy as np
     import matplotlib.pyplot as plt
@@ -127,32 +129,44 @@ def plot_benchmark_performance(
     colour = "steelblue"
 
     with plt.rc_context(rc or {}):
-        fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi)
+        fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi, constrained_layout=True)
 
         for ax, (key, xlabel, div, scale) in zip(axes, metrics):
-            df = bench_df.sort_values(key, ascending=True).copy()
+            df = bench_df.copy()
+            df["_sort_val"] = df[key].fillna(np.inf)  # Use np.inf so NaN sorts last
+            df = df.sort_values("_sort_val", ascending=True)
             vals = df[key] / div
             y = np.arange(len(df))
 
-            ax.barh(y, vals, color=colour)
+            bar_colors = ["lightgray" if pd.isna(v) else colour for v in df[key]]
+            bar_widths = [0 if pd.isna(v) else v / div for v in df[key]]
+            ax.barh(y, bar_widths, color=bar_colors)
+
             ax.set_yticks(y)
-            ax.set_yticklabels(df["method"])
+            ax.set_yticklabels(df["method"], fontsize=tick_fontsize)
             ax.invert_yaxis()
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(xlabel, fontsize=label_fontsize)
+            ax.tick_params(axis='x', labelsize=tick_fontsize)
             ax.grid(axis="x", ls=":", alpha=.4)
+
+            df = df.drop(columns="_sort_val")
+
+            for ypos, val, method, raw_val in zip(y, vals, df["method"], df[key]):
+                if pd.isna(raw_val):
+                    ax.text(0.02, ypos, "NaN", va="center", fontsize=8, color="black",
+                            transform=ax.get_yaxis_transform())
 
             if scale == "log":
                 ax.set_xscale("log")
                 min_val = max(0.001, np.nanmin(vals[vals > 0]))
                 max_val = np.nanmax(vals)
-                tick_min = 10**int(np.floor(np.log10(min_val)))
-                tick_max = 10**int(np.ceil(np.log10(max_val)))
+                tick_min = 10 ** int(np.floor(np.log10(min_val)))
+                tick_max = 10 ** int(np.ceil(np.log10(max_val)))
                 log_ticks = [x for x in [0.001, 0.01, 0.1, 1, 10, 100] if tick_min <= x <= tick_max]
                 ax.set_xticks(log_ticks)
                 ax.get_xaxis().set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
             else:
                 ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True, prune="both"))
-
 
             if key == "vram_MB":
                 text_offset = vals.max() * 0.02 if vals.max() > 0 else 1
@@ -161,14 +175,15 @@ def plot_benchmark_performance(
                         ax.text(val + text_offset, ypos, "CPU only",
                                 va="center", fontsize=8, color="black")
 
-        axes[0].set_ylabel("Integration Method")
-        if title:
-            fig.suptitle(title, fontsize=16, fontweight="bold")
+        axes[0].set_ylabel("Integration Method", fontsize=label_fontsize)
+        axes[0].tick_params(axis='y', labelsize=tick_fontsize)
 
-        plt.tight_layout()
+        if title:
+            fig.suptitle(title, fontsize=14, fontweight="bold")
 
         if save_path:
             plt.savefig(save_path, bbox_inches="tight")
+
         plt.show()
 
 
