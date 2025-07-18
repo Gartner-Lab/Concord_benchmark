@@ -179,10 +179,16 @@ def plot_benchmark_performance(
     # plotting
     # ------------------------------------------------------------------ #
     with plt.rc_context(rc or {}):
+        fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi, constrained_layout=True)
         fig, axes = plt.subplots(
             1, 3, figsize=figsize, dpi=dpi, constrained_layout=True
         )
 
+        for ax, (key, xlabel, div, scale) in zip(axes, metrics):
+            df = bench_df.copy()
+            df["_sort_val"] = df[key].fillna(np.inf)  # Use np.inf so NaN sorts last
+            df = df.sort_values("_sort_val", ascending=True)
+            vals = df[key] / div
         for ax, (key, base_label, divisor) in zip(axes, metrics):
             df = bench_df.sort_values(key, ascending=True).copy()
 
@@ -222,14 +228,30 @@ def plot_benchmark_performance(
             # draw bars --------------------------------------------------------
             ax.barh(y, vals_plot, color=colour)
             ax.set_yticks(y)
-            ax.set_yticklabels(df["method"])
+            ax.set_yticklabels(df["method"], fontsize=tick_fontsize)
             ax.invert_yaxis()
+            ax.set_xlabel(xlabel, fontsize=label_fontsize)
+            ax.tick_params(axis='x', labelsize=tick_fontsize)
             ax.set_xlabel(label)
             ax.grid(axis="x", ls=":", alpha=.4)
+
+            df = df.drop(columns="_sort_val")
+
+            for ypos, val, method, raw_val in zip(y, vals, df["method"], df[key]):
+                if pd.isna(raw_val):
+                    ax.text(0.02, ypos, "NaN", va="center", fontsize=8, color="black",
+                            transform=ax.get_yaxis_transform())
 
             # scale-specific ticks --------------------------------------------
             if scale == "log":
                 ax.set_xscale("log")
+                min_val = max(0.001, np.nanmin(vals[vals > 0]))
+                max_val = np.nanmax(vals)
+                tick_min = 10 ** int(np.floor(np.log10(min_val)))
+                tick_max = 10 ** int(np.ceil(np.log10(max_val)))
+                log_ticks = [x for x in [0.001, 0.01, 0.1, 1, 10, 100] if tick_min <= x <= tick_max]
+                ax.set_xticks(log_ticks)
+                ax.get_xaxis().set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
                 # nice decade ticks between data min/max
                 pos = vals_plot[vals_plot > 0]
                 tick_min = 10 ** np.floor(np.log10(pos.min()))
@@ -251,8 +273,12 @@ def plot_benchmark_performance(
                         ax.text(val + text_offset, ypos, "CPU only",
                                 va="center", fontsize=8, color="black")
 
-        axes[0].set_ylabel("Integration Method")
+        axes[0].set_ylabel("Integration Method", fontsize=label_fontsize)
+        axes[0].tick_params(axis='y', labelsize=tick_fontsize)
+
         if title:
+            fig.suptitle(title, fontsize=14, fontweight="bold")
+
             fig.suptitle(title, fontsize=16, fontweight="bold")
 
         if save_path:
