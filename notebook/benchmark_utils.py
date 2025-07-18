@@ -105,59 +105,149 @@ def get_clean_linear_ticks(max_val, preferred_steps=[50, 100, 200, 500, 1000]):
     tick_max = int(np.ceil(max_val / step) * step)
     return np.arange(0, tick_max + step, step)
 
-def plot_benchmark_performance(
-        bench_df: pd.DataFrame,
-        title: str = None,
-        figsize: tuple[int, int] = (10, 5),
-        dpi: int = 300,
-        save_path: Optional[Path] = None,
-        rc: dict | None = None,
-):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from matplotlib.ticker import LogLocator, FuncFormatter, MaxNLocator
 
+
+from pathlib import Path
+from typing import Optional, Mapping
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MaxNLocator
+
+
+def plot_benchmark_performance(
+    bench_df: pd.DataFrame,
+    title: str | None = None,
+    figsize: tuple[int, int] = (10, 4.5),
+    dpi: int = 300,
+    save_path: Optional[Path] = None,
+    rc: dict | None = None,
+    metric_scale: Mapping[str, str] | None = None,  # {'ram_MB': 'log', 'vram_MB': 'auto', ...}
+    log_span_thresh: float = 20.0,                  # span≥→log when scale='auto'
+):
+    """
+    Plot run-time, RAM, and VRAM usage for each integration method.
+
+    Parameters
+    ----------
+    bench_df : pd.DataFrame
+        Must contain columns: 'method', 'time_sec', 'ram_MB', 'vram_MB'.
+    title : str, optional
+        Figure title.
+    figsize, dpi : figure size & resolution.
+    save_path : Path, optional
+        Save figure if provided.
+    rc : dict, optional
+        Matplotlib rc overrides (passed to rc_context).
+    metric_scale : mapping, optional
+        Override per-metric axis scale. Valid: {'linear','log','auto'}.
+        Missing keys fall back to defaults: time=log, RAM=linear, VRAM=linear.
+    log_span_thresh : float
+        When scale='auto', switch to log if (max/min) span ≥ this.
+    """
+
+    # ------------------------------------------------------------------ #
+    # defaults + user overrides
+    # ------------------------------------------------------------------ #
+    scale_map = {
+        "time_sec": "log",
+        "ram_MB":   "linear",
+        "vram_MB":  "linear",
+    }
+    if metric_scale:
+        scale_map.update(metric_scale)
+
+    # autoscale units (MiB→GiB) so tick labels stay short ----------------
+    def _auto_unit(vals_mb: np.ndarray, label_mib: str):
+        # Use GiB if any value ≥ 2048 MiB
+        if np.nanmax(vals_mb) >= 2048:
+            return vals_mb / 1024.0, label_mib.replace("MiB", "GiB")
+        return vals_mb, label_mib
+
+    # metric spec: (column, label, divider)  (divider will be replaced if GiB)
     metrics = [
-        ("time_sec", "Run-time (h)", 3600, "log"),
-        ("ram_MB", "RAM (MiB)", 1, "linear"),
-        ("vram_MB", "VRAM (MiB)", 1, "linear"),
+        ("time_sec", "Run-time (h)", 3600.0),
+        ("ram_MB",   "RAM (MiB)",       1.0),
+        ("vram_MB",  "VRAM (MiB)",      1.0),
     ]
 
     cpu_methods = bench_df.loc[bench_df["vram_MB"] == 0, "method"].tolist()
     colour = "steelblue"
 
+    # ------------------------------------------------------------------ #
+    # plotting
+    # ------------------------------------------------------------------ #
     with plt.rc_context(rc or {}):
-        fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi)
+        fig, axes = plt.subplots(
+            1, 3, figsize=figsize, dpi=dpi, constrained_layout=True
+        )
 
-        for ax, (key, xlabel, div, scale) in zip(axes, metrics):
+        for ax, (key, base_label, divisor) in zip(axes, metrics):
             df = bench_df.sort_values(key, ascending=True).copy()
-            vals = df[key] / div
+
+            # convert units if needed
+            if key.endswith("_MB"):
+                vals_raw = df[key].to_numpy(dtype=float)
+                vals_conv, label = _auto_unit(vals_raw, base_label)
+                divisor = 1.0  # already converted
+            else:
+                vals_raw = df[key].to_numpy(dtype=float)
+                vals_conv = vals_raw / divisor
+                label = base_label
+
             y = np.arange(len(df))
 
-            ax.barh(y, vals, color=colour)
+            # decide scale -----------------------------------------------------
+            scale = scale_map.get(key, "linear")
+            if scale == "auto":
+                pos = vals_conv[vals_conv > 0]
+                span = (pos.max() / pos.min()) if pos.size else 1.0
+                scale = "log" if span >= log_span_thresh else "linear"
+
+            # handle zeros for log plotting ------------------------------------
+            if scale == "log":
+                pos = vals_conv[vals_conv > 0]
+                if pos.size == 0:
+                    # all zeros? fall back to linear to avoid log underflow
+                    scale = "linear"
+                    vals_plot = vals_conv
+                else:
+                    min_pos = pos.min()
+                    floor = min_pos / 10.0  # show tiny stub for zeros
+                    vals_plot = np.where(vals_conv > 0, vals_conv, floor)
+            else:
+                vals_plot = vals_conv
+
+            # draw bars --------------------------------------------------------
+            ax.barh(y, vals_plot, color=colour)
             ax.set_yticks(y)
             ax.set_yticklabels(df["method"])
             ax.invert_yaxis()
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(label)
             ax.grid(axis="x", ls=":", alpha=.4)
 
+            # scale-specific ticks --------------------------------------------
             if scale == "log":
                 ax.set_xscale("log")
-                min_val = max(0.001, np.nanmin(vals[vals > 0]))
-                max_val = np.nanmax(vals)
-                tick_min = 10**int(np.floor(np.log10(min_val)))
-                tick_max = 10**int(np.ceil(np.log10(max_val)))
-                log_ticks = [x for x in [0.001, 0.01, 0.1, 1, 10, 100] if tick_min <= x <= tick_max]
-                ax.set_xticks(log_ticks)
-                ax.get_xaxis().set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+                # nice decade ticks between data min/max
+                pos = vals_plot[vals_plot > 0]
+                tick_min = 10 ** np.floor(np.log10(pos.min()))
+                tick_max = 10 ** np.ceil(np.log10(pos.max()))
+                decades = 10 ** np.arange(np.log10(tick_min), np.log10(tick_max) + 1)
+                ax.set_xticks(decades)
+                ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
             else:
-                ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True, prune="both"))
+                ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=False, prune="both"))
 
-
+            # annotate CPU-only on VRAM panel ---------------------------------
             if key == "vram_MB":
-                text_offset = vals.max() * 0.02 if vals.max() > 0 else 1
-                for ypos, val, meth in zip(y, vals, df["method"]):
+                # use original (converted) value for offset
+                vmax = np.nanmax(vals_plot)
+                text_offset = vmax * 0.02 if vmax > 0 else 1
+                for ypos, val, meth in zip(y, vals_plot, df["method"]):
                     if meth in cpu_methods:
+                        # place text just to the right of the bar
                         ax.text(val + text_offset, ypos, "CPU only",
                                 va="center", fontsize=8, color="black")
 
@@ -165,10 +255,8 @@ def plot_benchmark_performance(
         if title:
             fig.suptitle(title, fontsize=16, fontweight="bold")
 
-        plt.tight_layout()
-
         if save_path:
-            plt.savefig(save_path, bbox_inches="tight")
+            fig.savefig(save_path, bbox_inches="tight")
         plt.show()
 
 
