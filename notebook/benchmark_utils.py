@@ -110,7 +110,7 @@ def get_clean_linear_ticks(max_val, preferred_steps=[50, 100, 200, 500, 1000]):
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator, FuncFormatter
+from matplotlib.ticker import MaxNLocator, FuncFormatter, LogLocator, NullFormatter
 from pathlib import Path
 from typing import Optional, Mapping
 
@@ -121,126 +121,111 @@ def plot_benchmark_performance(
     dpi: int = 300,
     save_path: Optional[Path] = None,
     rc: Optional[dict] = None,
-    label_fontsize: int = 10,
+    label_fontsize: int = 8,
     tick_fontsize: int = 8,
-    title_fontsize: int = 14, # Added for consistency
+    title_fontsize: int = 14,
+    unit: Literal["auto", "MiB", "GiB"] = "auto",
+    metric_scale: Union[str, dict] = "auto",
 ):
     """
-    Generates a performance benchmark plot with three horizontal bar charts
-    for run-time, RAM, and VRAM.
-
-    Each metric is sorted independently from best to worst.
-    Methods with NaN values for a metric are placed at the bottom with a "NaN" label.
-    Methods that use 0 VRAM are labeled "CPU only".
+    Generates a performance benchmark plot with three horizontal bar charts:
+    run-time, RAM, and VRAM usage.
 
     Args:
-        bench_df (pd.DataFrame): DataFrame containing benchmark results with
-                                 columns "method", "time_sec", "ram_MB", "vram_MB".
-        title (Optional[str]): Overall title for the plot.
-        figsize (tuple[int, int]): Figure size (width, height) in inches.
-        dpi (int): Dots per inch for the figure resolution.
-        save_path (Optional[Path]): Path to save the plot. If None, the plot is displayed.
-        rc (Optional[dict]): Dictionary of Matplotlib rcParams to apply.
-        label_fontsize (int): Font size for axis labels (e.g., "Run-time (h)").
-        tick_fontsize (int): Font size for tick labels (method names, x-axis values).
-        title_fontsize (int): Font size for the main plot title.
+        bench_df: DataFrame with columns ["method", "time_sec", "ram_MB", "vram_MB"].
+        title: Title of the whole plot.
+        figsize: Size of the figure.
+        dpi: Resolution of the plot.
+        save_path: Optional path to save the figure.
+        rc: Optional rcParams override.
+        label_fontsize: Font size for axis labels.
+        tick_fontsize: Font size for ticks.
+        title_fontsize: Font size for the plot title.
+        unit: Memory unit: "auto" (default), "MiB", or "GiB".
+        metric_scale: Axis scale: "auto", "log", "linear", or dict like {"time_sec": "log", ...}.
     """
+    # Determine RAM/VRAM unit
+    def determine_memory_unit(column: str) -> tuple[float, str]:
+        max_val = bench_df[column].max(skipna=True)
+        if unit == "GiB" or (unit == "auto" and max_val > 10240):  # 10 GiB threshold
+            return 1 / 1024, "GiB"
+        return 1, "MiB"
+
+    ram_factor, ram_label_unit = determine_memory_unit("ram_MB")
+    vram_factor, vram_label_unit = determine_memory_unit("vram_MB")
+
+    # Determine axis scale for each metric
+    def get_scale(metric: str) -> str:
+        if isinstance(metric_scale, dict):
+            return metric_scale.get(metric, "linear")
+        elif metric_scale in ("log", "linear"):
+            return metric_scale
+        return "log" if metric == "time_sec" else "linear"
+
     metrics = [
-        ("time_sec", "Run-time (h)", 3600, "log"),
-        ("ram_MB", "RAM (MiB)", 1, "linear"),
-        ("vram_MB", "VRAM (MiB)", 1, "linear"),
+        ("time_sec", "Run-time (h)", 3600, get_scale("time_sec")),
+        ("ram_MB", f"RAM ({ram_label_unit})", 1 / ram_factor, get_scale("ram_MB")),
+        ("vram_MB", f"VRAM ({vram_label_unit})", 1 / vram_factor, get_scale("vram_MB")),
     ]
 
-    # Pre-identify CPU-only methods
+    colour = "steelblue"
     cpu_methods = bench_df.loc[bench_df["vram_MB"] == 0, "method"].tolist()
-    
-    colour = "steelblue" # Standard bar color
+    nan_methods = bench_df[bench_df.isna().any(axis=1)]["method"].tolist()
 
     with plt.rc_context(rc or {}):
         fig, axes = plt.subplots(1, 3, figsize=figsize, dpi=dpi, constrained_layout=True)
 
         for ax, (key, xlabel, div, scale) in zip(axes, metrics):
-            # Create a copy to avoid modifying the original DataFrame
-            df_current_metric = bench_df.copy()
+            df_current = bench_df.copy()
+            df_current["_sort_val"] = df_current[key].fillna(np.inf)
+            df_current = df_current.sort_values("_sort_val").reset_index(drop=True)
+            df_current[key] = df_current[key].fillna(0.0)
+            vals = df_current[key] / div
+            y_positions = np.arange(len(df_current))
 
-            # Prepare for sorting: NaN values are sorted to the end using np.inf
-            df_current_metric["_sort_val"] = df_current_metric[key].fillna(np.inf)
-            df_current_metric = df_current_metric.sort_values("_sort_val", ascending=True).reset_index(drop=True)
-
-            # Raw values for plotting and labeling
-            vals = df_current_metric[key] / div
-            y_positions = np.arange(len(df_current_metric)) # Y-positions for all methods
-
-            # Plot bars: Matplotlib's barh will automatically not draw bars for NaN values
             ax.barh(y_positions, vals, color=colour)
-
-            # Set Y-axis labels (method names)
             ax.set_yticks(y_positions)
-            ax.set_yticklabels(df_current_metric["method"], fontsize=tick_fontsize)
-            ax.invert_yaxis() # Top-to-bottom order for y-axis
-
-            # Set X-axis label and ticks
+            ax.set_yticklabels(df_current["method"], fontsize=tick_fontsize)
+            ax.invert_yaxis()
             ax.set_xlabel(xlabel, fontsize=label_fontsize)
             ax.tick_params(axis='x', labelsize=tick_fontsize)
             ax.grid(axis="x", ls=":", alpha=.4)
 
-            # Remove temporary sort column
-            df_current_metric = df_current_metric.drop(columns="_sort_val")
-
-            # Add "NaN" text for methods with NaN values
-            # Using transform=ax.get_yaxis_transform() places x-coord in axes units (0-1)
-            # relative to the y-axis, making it scale independently of data range.
-            for y_pos_single, val_single, raw_val_single in zip(y_positions, vals, df_current_metric[key]):
-                if pd.isna(raw_val_single):
-                    # Place "NaN" slightly to the right of the Y-axis
-                    ax.text(0.02, y_pos_single, "NaN", va="center", fontsize=8, color="black",
+            # Add NaN text
+            for y_pos, method in zip(y_positions, df_current["method"]):
+                if method in nan_methods:
+                    ax.text(0.02, y_pos, "NaN", va="center", fontsize=8, color="black",
                             transform=ax.get_yaxis_transform())
 
-            # Configure X-axis scale (log or linear)
+            # Axis scaling
             if scale == "log":
                 ax.set_xscale("log")
-                # Calculate appropriate log ticks
-                min_val = max(0.001, np.nanmin(vals[vals > 0])) # Ensure min_val is positive
+                min_val = max(0.001, np.nanmin(vals[vals > 0]))
                 max_val = np.nanmax(vals)
-                tick_min_power = int(np.floor(np.log10(min_val)))
-                tick_max_power = int(np.ceil(np.log10(max_val)))
-
-                # Generate log ticks within a reasonable range
-                log_ticks_base = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000, 100000] # Extend as needed
-                log_ticks = [x for x in log_ticks_base if tick_min_power <= np.log10(x) <= tick_max_power]
-                if not log_ticks and max_val > 0: # Fallback if calculated range is too narrow
-                    log_ticks = [10**tick_min_power, 10**tick_max_power] if tick_min_power != tick_max_power else [10**tick_min_power]
-                    if not log_ticks and max_val > 0: log_ticks = [max_val] # Last resort
-                
+                tick_min = int(np.floor(np.log10(min_val)))
+                tick_max = int(np.ceil(np.log10(max_val)))
+                log_ticks = [10**i for i in range(tick_min, tick_max + 1)]
                 ax.set_xticks(log_ticks)
                 ax.get_xaxis().set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+
+                ax.xaxis.set_minor_locator(LogLocator(subs='all'))
+                ax.xaxis.set_minor_formatter(NullFormatter())
             else:
                 ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True, prune="both"))
 
-            # Add "CPU only" labels for VRAM metric
+            # CPU-only label for VRAM
             if key == "vram_MB":
-                for y_pos_single, val_single, method_single in zip(y_positions, vals, df_current_metric["method"]):
-                    if method_single in cpu_methods:
-                        # If VRAM is truly 0, place "CPU only" near the y-axis
-                        if val_single == 0 or np.isclose(val_single, 0, atol=1e-9): # Use atol for float comparison
-                            ax.text(0.02, y_pos_single, "CPU only", va="center", fontsize=8, color="black",
-                                    transform=ax.get_yaxis_transform())
-                        else:
-                            # For non-zero VRAM (but still CPU method if category allows, though unlikely)
-                            # Or if you want a fixed offset from the bar itself
-                            text_offset = vals.max() * 0.02 if vals.max() > 0 else 0.5 # Default offset
-                            ax.text(val_single + text_offset, y_pos_single, "CPU only",
-                                    va="center", fontsize=8, color="black")
+                for y_pos, val, method in zip(y_positions, vals, df_current["method"]):
+                    if method in cpu_methods and np.isclose(val, 0, atol=1e-9):
+                        ax.text(0.02, y_pos, "CPU only", va="center", fontsize=8, color="black",
+                                transform=ax.get_yaxis_transform())
 
-        # Set Y-axis label for the first subplot
         axes[0].set_ylabel("Integration Method", fontsize=label_fontsize)
         axes[0].tick_params(axis='y', labelsize=tick_fontsize)
 
-        # Set overall plot title
         if title:
             fig.suptitle(title, fontsize=title_fontsize, fontweight="bold")
 
-        # Save or show the plot
         if save_path:
             plt.savefig(save_path, bbox_inches="tight")
         else:
@@ -324,3 +309,87 @@ def compute_umap_and_save(
     final_path = data_dir / f"{file_name}_final.h5ad"
     adata.write_h5ad(final_path)
     print(f"💾 Final AnnData saved to: {final_path}")
+
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+from pathlib import Path
+
+def plot_ranked_scores(
+    score_dict: dict[str, pd.Series],
+    figsize=(3, 0.5),
+    custom_rc=None,
+    method_order: list[str] | None = None,
+    save_dir: Path | None = None,
+    title: str = "Method Rankings",
+    file_name: str = "ranked_scores_heatmap",
+    save_format: str = "pdf",
+):
+    """
+    Plots a heatmap of method rankings across datasets and optionally saves the plot.
+
+    Parameters
+    ----------
+    score_dict : dict
+        Keys are desired dataset names; values are Series of scores with method names as index.
+
+    figsize : tuple
+        Size of the heatmap (width, height).
+
+    custom_rc : dict
+        Optional matplotlib rcParams override (e.g., font settings).
+
+    save_dir : Path or None
+        If specified, saves the plot as a PDF in this directory.
+
+    file_name : str
+        Name of the saved file (default = 'ranked_scores_heatmap.pdf').
+    """
+    # Combine scores
+    all_scores = pd.concat(score_dict.values(), axis=1)
+    all_scores.columns = list(score_dict.keys())
+
+    # Compute rank
+    ranked = all_scores.rank(axis=0, ascending=False).astype("Int64")
+    heatmap_data = ranked.astype(float)
+
+    # Annotation
+    annot_text = heatmap_data.applymap(lambda val: str(int(val)) if pd.notna(val) else "-")
+
+    # Reorder methods if specified
+    if method_order is not None:
+        valid_methods = [m for m in method_order if m in heatmap_data.index]
+        heatmap_data = heatmap_data.reindex(valid_methods)
+        annot_text = annot_text.reindex(index=valid_methods)
+
+    # Colormap
+    cmap = sns.color_palette("viridis_r", as_cmap=True)
+    cmap.set_bad(color="lightgrey")
+
+    # Plot
+    with plt.rc_context(rc=custom_rc or {}):
+        plt.figure(figsize=figsize)
+        ax = sns.heatmap(
+            heatmap_data.T,
+            annot=annot_text.T,
+            fmt="",
+            cmap=cmap,
+            linewidths=1,
+            linecolor="white",
+            cbar=False
+        )
+
+        # Set title
+        ax.set_title(title, fontsize=12, pad=10)
+        plt.tight_layout()
+        
+        # Optional save
+        if save_dir is not None:
+            save_dir = Path(save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            file_path = save_dir / f"{file_name}.{save_format}"
+            plt.savefig(file_path, format=save_format)
+
+        plt.show()
