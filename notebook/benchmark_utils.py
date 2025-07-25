@@ -309,3 +309,87 @@ def compute_umap_and_save(
     final_path = data_dir / f"{file_name}_final.h5ad"
     adata.write_h5ad(final_path)
     print(f"💾 Final AnnData saved to: {final_path}")
+
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+from pathlib import Path
+
+def plot_ranked_scores(
+    score_dict: dict[str, pd.Series],
+    figsize=(3, 0.5),
+    custom_rc=None,
+    method_order: list[str] | None = None,
+    save_dir: Path | None = None,
+    title: str = "Method Rankings",
+    file_name: str = "ranked_scores_heatmap",
+    save_format: str = "pdf",
+):
+    """
+    Plots a heatmap of method rankings across datasets and optionally saves the plot.
+
+    Parameters
+    ----------
+    score_dict : dict
+        Keys are desired dataset names; values are Series of scores with method names as index.
+
+    figsize : tuple
+        Size of the heatmap (width, height).
+
+    custom_rc : dict
+        Optional matplotlib rcParams override (e.g., font settings).
+
+    save_dir : Path or None
+        If specified, saves the plot as a PDF in this directory.
+
+    file_name : str
+        Name of the saved file (default = 'ranked_scores_heatmap.pdf').
+    """
+    # Combine scores
+    all_scores = pd.concat(score_dict.values(), axis=1)
+    all_scores.columns = list(score_dict.keys())
+
+    # Compute rank
+    ranked = all_scores.rank(axis=0, ascending=False).astype("Int64")
+    heatmap_data = ranked.astype(float)
+
+    # Annotation
+    annot_text = heatmap_data.applymap(lambda val: str(int(val)) if pd.notna(val) else "-")
+
+    # Reorder methods if specified
+    if method_order is not None:
+        valid_methods = [m for m in method_order if m in heatmap_data.index]
+        heatmap_data = heatmap_data.reindex(valid_methods)
+        annot_text = annot_text.reindex(index=valid_methods)
+
+    # Colormap
+    cmap = sns.color_palette("viridis_r", as_cmap=True)
+    cmap.set_bad(color="lightgrey")
+
+    # Plot
+    with plt.rc_context(rc=custom_rc or {}):
+        plt.figure(figsize=figsize)
+        ax = sns.heatmap(
+            heatmap_data.T,
+            annot=annot_text.T,
+            fmt="",
+            cmap=cmap,
+            linewidths=1,
+            linecolor="white",
+            cbar=False
+        )
+
+        # Set title
+        ax.set_title(title, fontsize=12, pad=10)
+        plt.tight_layout()
+        
+        # Optional save
+        if save_dir is not None:
+            save_dir = Path(save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            file_path = save_dir / f"{file_name}.{save_format}"
+            plt.savefig(file_path, format=save_format)
+
+        plt.show()

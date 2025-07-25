@@ -1,34 +1,33 @@
-# Exclude heavy data and intermediate results
+# ─── Data and Results ────────────────────────────────────────────────
 data/
 save/
 resources/
 
-# Ignore RStudio project artifacts
+# ─── Jobs ────────────────────────────────────────────────────────────
+jobs/
+jobs/*/
+
+# ─── Notebooks ───────────────────────────────────────────────────────
+notebook/concord_Huycke_cc.ipynb
+notebook/concord_fish_embryogenesis.ipynb__pycache__/
+notebook/waddington_simulation2.ipynb
+notebook_private/
+
+# ─── RStudio ────────────────────────────────────────────────────────
 .Rproj.user/
 *.Rhistory
 *.RData
 
-# Ignore notebook checkpoints and OS files
+# ─── Python ──────────────────────────────────────────────────────────
+*.pyc
+__pycache__/
+
+# ─── Jupyter & OS ────────────────────────────────────────────────────
 .ipynb_checkpoints/
 .DS_Store
+._*
 
-# Ignore logs or temp files
+# ─── Logs and Temp Files ─────────────────────────────────────────────
 *.log
 *.tmp
 *.bak
-
-# ignore folder notebook_private
-
-# ignore all folders in jobs/
-jobs/*/
-
-# Ignore specific notebooks
-notebook/concord_Huycke_cc.ipynb
-notebook/concord_fish_embryogenesis.ipynb__pycache__/
-jobs/
-
-*.pyc
-__pycache__/
-*.pyc
-__pycache__/
-notebook/waddington_simulation2.ipynb
