@@ -381,7 +381,8 @@ def plot_ranked_scores(
             cbar=False
         )
 
-        # Set title
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=12, pad=10)
         plt.tight_layout()
         
@@ -393,3 +394,138 @@ def plot_ranked_scores(
             plt.savefig(file_path, format=save_format)
 
         plt.show()
+
+
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+def plot_resource_usage_heatmap(
+    usage_df: pd.DataFrame,
+    resource_type: str = "RAM",  # or "VRAM", "Time"
+    figsize=(5, 2.5),
+    custom_rc=None,
+    method_order: list[str] | None = None,
+    save_dir: Path | None = None,
+    title: str = "Resource Usage",
+    file_name: str = "resource_usage_heatmap",
+    save_format: str = "pdf",
+    dataset_display_map: dict[str, str] | None = None,
+):
+    """
+    Plots a heatmap of resource usage (RAM, VRAM, or Time) across datasets and methods.
+
+    Parameters
+    ----------
+    usage_df : pd.DataFrame
+        DataFrame with methods as rows and datasets as columns.
+
+    resource_type : str
+        One of "RAM", "VRAM", or "Time".
+
+    figsize : tuple
+        Size of the heatmap (width, height).
+
+    custom_rc : dict
+        Optional matplotlib rcParams override (e.g., font settings).
+
+    method_order : list or None
+        If specified, reorders the method columns.
+
+    save_dir : Path or None
+        If specified, saves the plot to this directory.
+
+    file_name : str
+        Name of the saved file (without extension).
+
+    save_format : str
+        File format for saving (e.g., "pdf", "png", "svg").
+
+    dataset_display_map : dict or None
+        Optional mapping to rename datasets (index of heatmap).
+        If None, uses raw dataset names.
+    """
+
+    def format_val(val):
+        if pd.isna(val):
+            return "-"
+        if resource_type == "VRAM" and np.isclose(val, 0, atol=1e-3):
+            return ""
+        if resource_type in {"RAM", "VRAM"}:
+            return f"{val:.0f}M" if val < 1024 else f"{val / 1024:.1f}G"
+        if resource_type == "Time":
+            return f"{int(val // 3600)}h" if val >= 3600 else (
+                   f"{int(val // 60)}m" if val >= 60 else f"{int(val)}s")
+        return str(val)
+
+    annot_df = usage_df.applymap(format_val)
+
+    # Rename datasets if a display map is provided
+    if dataset_display_map:
+        heatmap_df = usage_df.T.rename(index=dataset_display_map)
+        annot_df_renamed = annot_df.T.rename(index=dataset_display_map)
+    else:
+        heatmap_df = usage_df.T
+        annot_df_renamed = annot_df.T
+
+    # Reorder method columns
+    if method_order is not None:
+        valid_methods = [m for m in method_order if m in heatmap_df.columns]
+        heatmap_df = heatmap_df[valid_methods]
+        annot_df_renamed = annot_df_renamed[valid_methods]
+
+    # Identify CPU-only and NaN entries
+    cpu_mask = (
+        heatmap_df.applymap(lambda val: np.isclose(val, 0, atol=1e-3))
+        if resource_type == "VRAM" else pd.DataFrame(False, index=heatmap_df.index, columns=heatmap_df.columns)
+    )
+    nan_mask = heatmap_df.isna()
+
+    # Plotting
+    cmap = plt.get_cmap("Oranges")
+    cmap.set_bad(color="lightgrey")
+
+    with plt.rc_context(rc=custom_rc or {}):
+        plt.figure(figsize=figsize)
+        ax = sns.heatmap(
+            heatmap_df.astype(float),
+            annot=annot_df_renamed,
+            fmt="",
+            cmap=cmap,
+            linewidths=1,
+            linecolor="white",
+            cbar=False,
+            annot_kws={"fontsize": 9}
+        )
+
+        for row_idx, dataset in enumerate(heatmap_df.index):
+            for col_idx, method in enumerate(heatmap_df.columns):
+                if cpu_mask.loc[dataset, method]:
+                    ax.text(
+                        col_idx + 0.5, row_idx + 0.5,
+                        "CPU only", ha="center", va="center",
+                        fontsize=7, color="black"
+                    )
+                elif nan_mask.loc[dataset, method]:
+                    ax.text(
+                        col_idx + 0.5, row_idx + 0.5,
+                        "NaN", ha="center", va="center",
+                        fontsize=8, color="black"
+                    )
+
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+        ax.set_title(title, fontsize=12, pad=10)
+        plt.tight_layout()
+
+        if save_dir is not None:
+            save_dir = Path(save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            save_path = save_dir / f"{file_name}.{save_format}"
+            plt.savefig(save_path, format=save_format)
+
+        plt.show()
+
