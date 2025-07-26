@@ -413,6 +413,7 @@ def plot_resource_usage_heatmap(
     title: str = "Resource Usage",
     file_name: str = "resource_usage_heatmap",
     save_format: str = "pdf",
+    dataset_display_map: dict[str, str] | None = None,
 ):
     """
     Plots a heatmap of resource usage (RAM, VRAM, or Time) across datasets and methods.
@@ -442,49 +443,48 @@ def plot_resource_usage_heatmap(
 
     save_format : str
         File format for saving (e.g., "pdf", "png", "svg").
+
+    dataset_display_map : dict or None
+        Optional mapping to rename datasets (index of heatmap).
+        If None, uses raw dataset names.
     """
-    # Format annotation values
+
     def format_val(val):
         if pd.isna(val):
             return "-"
         if resource_type == "VRAM" and np.isclose(val, 0, atol=1e-3):
-            return ""  # Hide 0M
-        if resource_type == "RAM":
+            return ""
+        if resource_type in {"RAM", "VRAM"}:
             return f"{val:.0f}M" if val < 1024 else f"{val / 1024:.1f}G"
-        elif resource_type == "VRAM":
-            return f"{val:.0f}M" if val < 1024 else f"{val / 1024:.1f}G"
-        elif resource_type == "Time":
-            return f"{int(val // 3600)}h" if val >= 3600 else (f"{int(val // 60)}m" if val >= 60 else f"{int(val)}s")
+        if resource_type == "Time":
+            return f"{int(val // 3600)}h" if val >= 3600 else (
+                   f"{int(val // 60)}m" if val >= 60 else f"{int(val)}s")
         return str(val)
 
     annot_df = usage_df.applymap(format_val)
 
-    # Transpose for heatmap layout: datasets as rows, methods as columns
-    dataset_display_map = {
-        "cross_tissue_Eraslan": "GTEX v9",
-        "HypoMap_Steuernagel": "HypoMap",
-        "pancreatic_islet_Hrovatin": "Mouse Pancreatic Islet Atlas",
-        "immune_DominguezConde": "Immune Cell Atlas",
-        "TabulaSapiens": "Tabula Sapiens"
-    }
+    # Rename datasets if a display map is provided
+    if dataset_display_map:
+        heatmap_df = usage_df.T.rename(index=dataset_display_map)
+        annot_df_renamed = annot_df.T.rename(index=dataset_display_map)
+    else:
+        heatmap_df = usage_df.T
+        annot_df_renamed = annot_df.T
 
-    heatmap_df = usage_df.T.rename(index=dataset_display_map)
-    annot_df_renamed = annot_df.T.rename(index=dataset_display_map)
-
-    # Reorder methods (columns) if specified
+    # Reorder method columns
     if method_order is not None:
         valid_methods = [m for m in method_order if m in heatmap_df.columns]
         heatmap_df = heatmap_df[valid_methods]
         annot_df_renamed = annot_df_renamed[valid_methods]
 
-    # CPU and NaN masks
+    # Identify CPU-only and NaN entries
     cpu_mask = (
         heatmap_df.applymap(lambda val: np.isclose(val, 0, atol=1e-3))
         if resource_type == "VRAM" else pd.DataFrame(False, index=heatmap_df.index, columns=heatmap_df.columns)
     )
     nan_mask = heatmap_df.isna()
 
-    # Plot
+    # Plotting
     cmap = plt.get_cmap("Oranges")
     cmap.set_bad(color="lightgrey")
 
@@ -501,7 +501,6 @@ def plot_resource_usage_heatmap(
             annot_kws={"fontsize": 9}
         )
 
-        # Add CPU-only and NaN labels
         for row_idx, dataset in enumerate(heatmap_df.index):
             for col_idx, method in enumerate(heatmap_df.columns):
                 if cpu_mask.loc[dataset, method]:
@@ -529,3 +528,4 @@ def plot_resource_usage_heatmap(
             plt.savefig(save_path, format=save_format)
 
         plt.show()
+
