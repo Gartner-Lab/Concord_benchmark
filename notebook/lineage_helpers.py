@@ -813,7 +813,7 @@ def geodesic_distance_matrix(
     import scanpy as sc
     import numpy as np
     import scipy.sparse.csgraph as csgraph
-
+    
     # ------------------------------------------------------------------ 1 · graph
     if conn_key is None:
         tmp_key = f"_nn_{n_neighbors}"
@@ -1943,3 +1943,345 @@ def plot_paths_on_embedding(
     if save_path:
         fig.savefig(save_path, bbox_inches="tight")
     plt.show()
+
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers reused from earlier messages (keep them once in your module)
+# ──────────────────────────────────────────────────────────────────────────────
+import numpy as np
+import pandas as pd
+import networkx as nx
+from typing import Dict, Iterable, Optional, Sequence, Tuple
+from sklearn.neighbors import NearestNeighbors
+import seaborn as sns
+import matplotlib.pyplot as plt
+import contextlib
+
+def build_cell_to_nodes(G: nx.DiGraph) -> Dict[int, list[str]]:
+    """Collect all lineage nodes each cell maps to (no tie-breaking)."""
+    cell_to_nodes: Dict[int, list[str]] = {}
+    for n, data in G.nodes(data=True):
+        for i in data.get("cells", []) or []:
+            lst = cell_to_nodes.setdefault(int(i), [])
+            if n not in lst:
+                lst.append(n)
+    return cell_to_nodes
+
+def lineage_hop_lookup(
+    G: nx.DiGraph,
+    mapped_nodes: Optional[Iterable[str]] = None,
+    *,
+    undirected: bool = True,
+) -> Dict[str, Dict[str, int]]:
+    """dist[u][v] = hop distance on the lineage tree."""
+    H = G.to_undirected(as_view=True) if undirected else G
+    if mapped_nodes is None:
+        mapped_nodes = list(G.nodes)
+    mapped_nodes = [n for n in mapped_nodes if n in G]
+    dist = {}
+    for u in mapped_nodes:
+        d = nx.single_source_shortest_path_length(H, u)
+        dist[u] = {v: d[v] for v in mapped_nodes if v in d}
+    return dist
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 1) Per-embedding evaluation (returns per-anchor rows)
+# ──────────────────────────────────────────────────────────────────────────────
+def evaluate_embedding_vs_lineage_knn(
+    adata,
+    G: nx.DiGraph,
+    *,
+    emb_key: str,
+    k_list: Sequence[int] = (30, 100, 300),
+    n_anchors: Optional[int] = 1000,
+    random_state: int = 0,
+    metric: str = "euclidean",
+    use_faiss: bool = False,               # set True if you wire in your FAISS class
+    missing_policy: str = "skip",          # "skip" | "nan" | "max"
+    undirected_tree: bool = True,
+    cell_to_nodes: Optional[Dict[int, list[str]]] = None,
+) -> pd.DataFrame:
+    """
+    For each anchor cell, take its kNN in adata.obsm[emb_key] and compute:
+      • mean_hop  – mean of min-hop to each neighbor (lower is better)
+      • purity    – fraction of neighbors with hop == 0
+      • frac_mapped – neighbors with a computable hop / k
+
+    Multiple lineage mappings per cell are supported: hop(anchor, nb) is
+    min_{u in nodes(anchor), v in nodes(nb)} hop(u, v).
+    """
+    # ---------- 1) mappings / lineage distances ------------------------------
+    if cell_to_nodes is None:
+        cell_to_nodes = build_cell_to_nodes(G)
+    mapped_nodes = sorted({n for nodes in cell_to_nodes.values() for n in nodes})
+    dist_lookup = lineage_hop_lookup(G, mapped_nodes, undirected=undirected_tree)
+
+    if missing_policy == "max":
+        finite = [d for u in dist_lookup for d in dist_lookup[u].values()]
+        max_hop = max(finite) if finite else np.nan
+
+    # ---------- 2) kNN engine (sklearn by default) ---------------------------
+    X = adata.obsm[emb_key]
+    n = X.shape[0]
+
+    get_knn = None
+    if use_faiss:
+        try:
+            # plug in your FAISS Neighborhood here if desired
+            from concord.model import Neighborhood
+            eng = Neighborhood(X, k=max(k_list), use_faiss=True, metric=metric)
+            def get_knn(i, k):
+                return eng.get_knn(np.asarray([i]), k=k, include_self=False)[0]
+        except Exception:
+            get_knn = None
+
+    if get_knn is None:
+        nbrs = NearestNeighbors(n_neighbors=max(k_list)+1, metric=metric).fit(X)
+        def get_knn(i, k):
+            _, ind = nbrs.kneighbors(X[i:i+1], n_neighbors=k+1)
+            return ind[0][1:(k+1)]
+
+    # ---------- 3) anchors ---------------------------------------------------
+    rng = np.random.default_rng(random_state)
+    anchors = np.arange(n) if (n_anchors is None or n_anchors >= n) else rng.choice(n, size=n_anchors, replace=False)
+
+    # ---------- 4) compute per-anchor stats ---------------------------------
+    rows = []
+    for k in k_list:
+        for a in anchors:
+            A = cell_to_nodes.get(int(a), [])
+            if not A:  # anchor unmapped
+                rows.append(dict(anchor=a, k=k, mean_hop=np.nan, purity=np.nan,
+                                 n_used=0, frac_mapped=0.0))
+                continue
+
+            neigh = get_knn(int(a), k)
+            hop_list = []
+            mapped_ct = 0
+
+            for b in neigh:
+                B = cell_to_nodes.get(int(b), [])
+                if not B:
+                    if missing_policy == "skip":
+                        continue
+                    elif missing_policy == "nan":
+                        hop_list.append(np.nan)
+                    elif missing_policy == "max":
+                        hop_list.append(max_hop)
+                    continue
+
+                # min hop over all mapped-node pairs
+                best = np.inf
+                du = dist_lookup.get  # small speed-up
+                for u in A:
+                    d_u = du(u, {})
+                    for v in B:
+                        d = d_u.get(v, np.nan)
+                        if not np.isnan(d) and d < best:
+                            best = d
+                if np.isinf(best):
+                    if missing_policy == "skip":
+                        continue
+                    elif missing_policy == "nan":
+                        hop_list.append(np.nan)
+                    elif missing_policy == "max":
+                        hop_list.append(max_hop)
+                else:
+                    hop_list.append(best)
+                    mapped_ct += 1
+
+            hops = np.asarray(hop_list, float)
+            used_mask = np.isfinite(hops)
+            used = hops[used_mask]
+            mean_hop = np.nan if used.size == 0 else used.mean()
+            purity   = np.nan if used.size == 0 else (used == 0).mean()
+            frac_mapped = mapped_ct / float(k) if k > 0 else np.nan
+
+            rows.append(dict(anchor=a, k=k,
+                             mean_hop=mean_hop, purity=purity,
+                             n_used=int(used.size), frac_mapped=frac_mapped))
+
+    return pd.DataFrame(rows)
+
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2) Run across multiple embeddings / methods
+# ──────────────────────────────────────────────────────────────────────────────
+def knn_lineage_quality_across_methods(
+    adata,
+    G: nx.DiGraph,
+    emb_keys: Sequence[str],
+    *,
+    k_list: Sequence[int] = (30, 100, 300),
+    n_anchors: Optional[int] = 1000,
+    random_state: int = 0,
+    metric: str = "euclidean",
+    use_faiss: bool = False,
+    missing_policy: str = "skip",
+    undirected_tree: bool = True,
+) -> pd.DataFrame:
+    """
+    Returns a tidy DataFrame with columns:
+        method · k · anchor · mean_hop · purity · n_used · frac_mapped
+    """
+    # Build once and reuse across methods
+    cell_to_nodes = build_cell_to_nodes(G)
+
+    dfs = []
+    for m in emb_keys:
+        print(f"Evaluating {m} ...")
+        df = evaluate_embedding_vs_lineage_knn(
+            adata, G,
+            emb_key=m,
+            k_list=k_list,
+            n_anchors=n_anchors,
+            random_state=random_state,
+            metric=metric,
+            use_faiss=use_faiss,
+            missing_policy=missing_policy,
+            undirected_tree=undirected_tree,
+            cell_to_nodes=cell_to_nodes,   # reuse mapping
+        )
+        df["method"] = m
+        dfs.append(df)
+    return pd.concat(dfs, ignore_index=True)
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) Boxplots across methods & k (purity and/or mean_hop)
+# ──────────────────────────────────────────────────────────────────────────────
+def plot_knn_lineage_quality_single(
+    df: pd.DataFrame,
+    *,
+    metric: str = "purity",                 # e.g. "purity" or "mean_hop"
+    facet_by_k: bool = True,
+    order_methods: Optional[Sequence[str]] = None,
+    palette: str = "tab10",
+    figsize: Tuple[float, float] = (6, 2.2),
+    custom_rc: Optional[dict] = None,
+    save_path: Optional[str] = None,
+    # --- new options for y-limit capping ---
+    y_cap_quantile: Optional[float] = None,   # e.g. 95 → cap at 95th percentile
+    y_cap_expand: float = 1.03,               # add headroom above the cap
+    y_cap_per_k: bool = False,                # per-facet cap when facet_by_k=True
+) -> Union[plt.Axes, List[plt.Axes]]:
+    """
+    Boxplots of a single KNN-lineage metric across methods and k.
+
+    If `y_cap_quantile` is provided, the y-axis top is capped at the chosen
+    percentile (global or per-k when faceting), multiplied by `y_cap_expand`.
+
+    Returns
+    -------
+    Axes (if facet_by_k=False) or list[Axes] (if facet_by_k=True)
+    """
+    if metric not in df.columns:
+        raise ValueError(f"'{metric}' not found in df columns.")
+
+    # keep only necessary cols and drop NaNs for the target metric
+    need_cols = ["method", "k", metric]
+    missing = [c for c in need_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in df: {missing}")
+    dfp = df[need_cols].dropna(subset=[metric]).copy()
+
+    # decide order of methods:
+    #   larger is better for 'purity', smaller is better for 'mean_hop'
+    if order_methods is None:
+        asc = (metric == "mean_hop")
+        med = dfp.groupby("method")[metric].median().sort_values(ascending=asc)
+        order_methods = med.index.tolist()
+
+    _rc = {
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "svg.fonttype": "none",
+        "text.usetex": False,
+    }
+    if custom_rc:
+        _rc.update(custom_rc)
+
+    rc_ctx = plt.rc_context(rc=_rc)
+    with rc_ctx:
+        if facet_by_k:
+            # one column per k
+            g = sns.catplot(
+                data=dfp,
+                kind="box",
+                x="method", y=metric,
+                col="k",
+                order=order_methods,
+                palette=palette,
+                sharey=True,             # same scale across k for this metric
+                width=0.7, fliersize=0.5,
+                height=figsize[1],
+                aspect=max(
+                    0.5,
+                    figsize[0] / (len(np.unique(dfp["k"])) * figsize[1] + 1e-9)
+                ),
+            )
+            # cosmetics
+            for ax in g.axes.flat:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(0.5)
+                ax.tick_params(axis="x", rotation=60, labelsize=8)
+                ax.tick_params(axis="y", labelsize=8)
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+            g.set_titles(col_template="k = {col_name}")
+
+            # ---- optional y-cap ----
+            if y_cap_quantile is not None:
+                if y_cap_per_k:
+                    # cap each facet using the subset for that k
+                    for ax, kval in zip(g.axes.flat, g.col_names):
+                        vals = dfp.loc[dfp["k"] == kval, metric].to_numpy()
+                        if np.isfinite(vals).any():
+                            p = np.nanpercentile(vals, y_cap_quantile)
+                            ax.set_ylim(top=p * y_cap_expand)
+                else:
+                    # global cap from all values of this metric
+                    vals = dfp[metric].to_numpy()
+                    if np.isfinite(vals).any():
+                        p = np.nanpercentile(vals, y_cap_quantile)
+                        for ax in g.axes.flat:
+                            ax.set_ylim(top=p * y_cap_expand)
+
+            plt.tight_layout()
+            if save_path:
+                g.savefig(save_path, bbox_inches="tight", dpi=600)
+            return list(g.axes.flat)
+
+        else:
+            # one axis, hue by k
+            fig, ax = plt.subplots(figsize=figsize, dpi=600)
+            sns.boxplot(
+                data=dfp,
+                x="method", y=metric, hue="k",
+                order=order_methods,
+                palette=palette,
+                width=0.7, fliersize=0.5,
+                ax=ax,
+            )
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.5)
+            ax.tick_params(axis="x", rotation=60, labelsize=8)
+            ax.tick_params(axis="y", labelsize=8)
+            ax.set(xlabel="", ylabel="")
+
+            # ---- optional y-cap (single axis) ----
+            if y_cap_quantile is not None:
+                vals = dfp[metric].to_numpy()
+                if np.isfinite(vals).any():
+                    p = np.nanpercentile(vals, y_cap_quantile)
+                    ax.set_ylim(top=p * y_cap_expand)
+
+            plt.tight_layout()
+            if save_path:
+                fig.savefig(save_path, bbox_inches="tight", dpi=600)
+            return ax
