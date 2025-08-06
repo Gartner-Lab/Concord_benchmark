@@ -1362,7 +1362,7 @@ def plot_lineage_paths(
                     edgecolors="none", rasterized=True, zorder=0)
         for p, lbl in zip(paths, path_labels):
             _draw_one_path(plt.gca(), p, color=group2color[lbl])
-        plt.title(f"Lineage paths on {basis}", fontsize=12)
+        plt.title(f"Lineage paths on {basis}", fontsize=8)
         plt.xticks([]); plt.yticks([]); plt.xlabel(""); plt.ylabel("")
 
     if save_path:
@@ -2285,3 +2285,311 @@ def plot_knn_lineage_quality_single(
             if save_path:
                 fig.savefig(save_path, bbox_inches="tight", dpi=600)
             return ax
+        
+
+
+
+
+import numpy as np
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from pathlib import Path
+from typing import Sequence, Callable, Optional, Tuple, List, Dict
+
+# You already have these in your helpers:
+# from lineage_helpers import parse_annotation, get_representative_point
+
+
+# -----------------------------------------------------------------------------#
+#  Helpers
+# -----------------------------------------------------------------------------#
+
+def _resolve_palette(groups: Sequence[str],
+                     palette: str | Sequence[str] | Dict[str, str],
+                     fallback_cmap: str = "tab20") -> Dict[str, str]:
+    """
+    Turn a palette spec into a {group: colour} dict.
+    """
+    groups = list(groups)
+    if isinstance(palette, dict):
+        # keep provided colours; supply any missing from a fallback cmap
+        mapping = dict(palette)
+        missing = [g for g in groups if g not in mapping]
+        if missing:
+            cmap = cm.get_cmap(fallback_cmap, len(missing))
+            mapping.update({g: cmap(i) for i, g in enumerate(missing)})
+        return mapping
+    elif isinstance(palette, str):
+        cmap = cm.get_cmap(palette, len(groups))
+        return {g: cmap(i) for i, g in enumerate(groups)}
+    else:
+        colours = list(palette)
+        if len(colours) < len(groups):
+            # repeat if not enough
+            rep = int(np.ceil(len(groups) / len(colours)))
+            colours = (colours * rep)[:len(groups)]
+        return dict(zip(groups, colours))
+
+
+def extract_subgraph(G: nx.DiGraph,
+                     roots: Sequence[str],
+                     trim: Optional[Sequence[str]] = None) -> nx.DiGraph:
+    """
+    Subgraph containing all descendants of the provided `roots` (and the roots).
+    Optionally trim by removing a node and all its descendants.
+    """
+    keep: set[str] = set()
+    for r in roots:
+        if r not in G:
+            continue
+        des = nx.descendants(G, r)
+        des.add(r)
+        keep.update(des)
+    subg = G.subgraph(keep).copy()
+
+    if trim:
+        for t in trim:
+            if t in subg:
+                subg.remove_nodes_from(list(nx.descendants(subg, t)) + [t])
+    return subg
+
+
+def build_root_to_leaf_paths(G: nx.DiGraph,
+                             roots: Sequence[str]) -> List[List[str]]:
+    """
+    All root→leaf simple paths that exist in `G`.
+    """
+    leafs = [n for n in G.nodes if G.out_degree(n) == 0]
+    paths = []
+    for r in roots:
+        for l in leafs:
+            if nx.has_path(G, r, l):
+                paths.append(nx.shortest_path(G, r, l))
+    return paths
+
+
+
+
+def plot_lineage_paths_from_roots(
+    adata,
+    G: nx.DiGraph,
+    *,
+    roots: Sequence[str],
+    trim: Optional[Sequence[str]] = None,
+    basis: str = "Concord-decoder_UMAP",
+    adata_lineage_key: str = "lin_or_ct",  # adata.obs key for lineage/celltype
+    bg_obs_key: str = "lin_or_ct",         # background colouring category
+    path_labeler: Optional[Callable[[str], str]] = None,
+    path_palette: str | Sequence[str] | Dict[str, str] = "tab20",
+    bg_palette: str | Sequence[str] | Dict[str, str] = "tab20",
+    bg_alpha: float = 0.5,
+    bg_point_size: float = 0.3,
+    marker_size: int = 3,
+    marker_edgewidth: float = 0.2,
+    marker_alpha: float = 0.8,
+    line_width: float = 0.3,
+    line_alpha: float = 0.7,
+    path_plot_labels: bool = False,
+    bg_plot_labels: bool = False,
+    zoom: bool = False,
+    square: bool = False,
+    figsize: Tuple[float, float] = (2, 2),
+    dpi: int = 600,
+    medoid_k_top: int = 10,
+    medoid_max_n: int = 2000,
+    seed: Optional[int] = None,
+    add_inferred_trajectory: bool = False,
+    neighborhood_cls=None,
+    knn_k: int = 30,
+    save_path: Optional[str | Path] = None,
+    # ── NEW: highlight controls ──────────────────────────────────────────────
+    highlight_paths: Optional[Sequence[Sequence[str]]] = None,
+    highlight_leaves: Optional[Sequence[str]] = None,
+    highlight_end_contains: Optional[Sequence[str]] = None,
+    highlight_start_in: Optional[Sequence[str]] = None,
+    highlight_style: Optional[Dict[str, Any]] = None,
+    **kwargs
+):
+    """
+    Draw lineage paths on a 2-D embedding from given roots; optionally highlight
+    a subset of paths by leaf name, by end-node annotations, by start-node, or
+    by explicitly supplying paths.
+
+    Highlight rules (OR’ed):
+      • path ∈ highlight_paths
+      • path[-1] ∈ highlight_leaves
+      • any(token in end-node annotations) for token ∈ highlight_end_contains,
+        optionally gated by start node in highlight_start_in
+
+    highlight_style keys:
+      hi_line_color, hi_line_width, hi_line_alpha
+      lo_line_color, lo_line_width, lo_line_alpha
+    """
+    import matplotlib.colors as mcolors
+    from concord.plotting import plot_embedding
+
+    # ---- defaults for highlight styling
+    _hs = {
+        "hi_line_color": "black",
+        "hi_line_width": max(1.0, line_width),
+        "hi_line_alpha": max(0.7, line_alpha),
+        "lo_line_color": "lightgrey",
+        "lo_line_width": min(0.3, line_width),
+        "lo_line_alpha": min(0.5, line_alpha),
+    }
+    if highlight_style:
+        _hs.update(highlight_style)
+
+    highlight_paths = [list(p) for p in (highlight_paths or [])]
+    highlight_leaves = set(highlight_leaves or [])
+    end_tokens = list(highlight_end_contains or [])
+    start_whitelist = set(highlight_start_in or [])
+
+    # ---- subgraph & paths
+    subg = extract_subgraph(G, roots, trim=trim)
+    paths = build_root_to_leaf_paths(subg, roots)
+
+    # ---- background (plot all cells, colored by bg_obs_key)
+    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    plot_embedding(
+        adata, basis, [bg_obs_key],
+        point_size=bg_point_size, alpha=bg_alpha,
+        legend_loc=("on data" if bg_plot_labels else None),
+        pal=bg_palette, ax=ax, **kwargs
+    )
+
+    # ---- group labels & colours
+    if path_labeler is None:
+        path_labeler = lambda leaf: leaf
+    path_groups = [path_labeler(p[-1]) for p in paths] if paths else []
+    uniq_groups = sorted(set(path_groups))
+    path_group2color = _resolve_palette(uniq_groups, path_palette, fallback_cmap="tab20")
+
+    # ---- helper to decide highlight
+    def _end_annotations(node: str) -> list[str]:
+        """Return the preferred end-node annotations for matching tokens."""
+        attrs = subg.nodes[node]
+        cand = parse_annotation(attrs.get("linorct"))
+        if cand:
+            return cand
+        lin = parse_annotation(attrs.get("lineage_annot"))
+        if lin:
+            return lin
+        ct = parse_annotation(attrs.get("celltype_annot"))
+        if ct:
+            return ct
+        return []
+
+    def _is_highlight(path: Sequence[str]) -> bool:
+        # explicit path
+        if any(list(path) == hp for hp in highlight_paths):
+            return True
+        # exact leaf match
+        if highlight_leaves and path[-1] in highlight_leaves:
+            # optionally gate by start node
+            return (not start_whitelist) or (path[0] in start_whitelist)
+        # end-node tokens
+        if end_tokens:
+            anns = _end_annotations(path[-1])
+            if any(tok in anns for tok in end_tokens):
+                return (not start_whitelist) or (path[0] in start_whitelist)
+        return False
+
+    # ---- draw each path using FULL adata for medoids
+    all_rep_points: list[np.ndarray] = []
+    for path, grp in zip(paths, path_groups):
+        rep_points, rep_idx, labels = [], [], []
+
+        for node in path:
+            attrs = subg.nodes[node]
+            # prefer linorct; fallback to lineage/celltype
+            cand = parse_annotation(attrs.get("linorct"))
+            if cand:
+                mask = adata.obs[adata_lineage_key].isin(cand) if adata_lineage_key in adata.obs else None
+            else:
+                lin = parse_annotation(attrs.get("lineage_annot"))
+                ct  = parse_annotation(attrs.get("celltype_annot"))
+                if lin and "lineage_complete" in adata.obs:
+                    mask = adata.obs["lineage_complete"].isin(lin); cand = lin
+                elif ct and "cell_type" in adata.obs:
+                    mask = adata.obs["cell_type"].isin(ct); cand = ct
+                else:
+                    mask = None
+
+            if mask is None or mask.sum() == 0:
+                rep_points.append([np.nan, np.nan]); labels.append((node, [])); continue
+
+            idx = np.where(mask.values if hasattr(mask, "values") else mask)[0]
+            coords = adata.obsm[basis][idx]
+            rp, j = get_representative_point(
+                coords, method="medoid",
+                max_n_medoid=medoid_max_n, k_top=medoid_k_top,
+                jitter=0, return_idx=True, seed=seed
+            )
+            rep_points.append(rp); rep_idx.append(idx[j]); labels.append((node, cand))
+
+        rep_points = np.asarray(rep_points)
+        valid = ~np.isnan(rep_points[:, 0])
+        if valid.sum() < 2:
+            continue
+        rep_points = rep_points[valid]
+        labels = [labels[i] for i, ok in enumerate(valid) if ok]
+        all_rep_points.append(rep_points)
+
+        # --- decide highlight & set styles
+        do_hi = _is_highlight(path)
+        line_col = mcolors.to_rgba(_hs["hi_line_color" if do_hi else "lo_line_color"],
+                                   alpha=_hs["hi_line_alpha" if do_hi else "lo_line_alpha"])
+        lw = _hs["hi_line_width" if do_hi else "lo_line_width"]
+        marker_face = mcolors.to_rgba(path_group2color.get(grp, "black"), alpha=marker_alpha)
+
+        # --- draw (line + markers with independent alpha)
+        ax.plot(rep_points[:, 0], rep_points[:, 1],
+                color=line_col, linewidth=lw, zorder=2)
+        ax.scatter(rep_points[:, 0], rep_points[:, 1],
+                   s=marker_size**2,
+                   facecolors=marker_face,
+                   edgecolors="black",
+                   linewidths=marker_edgewidth,
+                   zorder=3)
+
+        if path_plot_labels:
+            for (cx, cy), (name, ann) in zip(rep_points, labels):
+                ax.text(cx, cy, f"{name}\n{ann}", fontsize=2,
+                        color="black", zorder=4, alpha=0.5)
+
+        if add_inferred_trajectory and neighborhood_cls is not None and len(rep_idx) >= 2:
+            try:
+                neigh = neighborhood_cls(adata.obsm[basis], k=knn_k, use_faiss=False)
+                # Example (fill in your own trajectory helper if available):
+                # traj, _ = shortest_path_on_knn_graph(neigh, k=knn_k, point_a=rep_idx[0], point_b=rep_idx[-1], use_faiss=False)
+                # ax.plot(adata.obsm[basis][traj, 0], adata.obsm[basis][traj, 1],
+                #         color="black", linewidth=0.3, alpha=0.8, zorder=1)
+            except Exception:
+                pass
+
+    # ---- cosmetics & optional zoom
+    ax.set_xlabel(""); ax.set_ylabel("")
+    ax.set_xticks([]); ax.set_yticks([])
+    if zoom and all_rep_points:
+        all_pts = np.vstack(all_rep_points)
+        min_x, min_y = np.nanmin(all_pts, axis=0)
+        max_x, max_y = np.nanmax(all_pts, axis=0)
+        if square:
+            side = max(max_x - min_x, max_y - min_y)
+            margin = 0.1 * side
+            cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
+            half = side / 2 + margin
+            ax.set_xlim(cx - half, cx + half)
+            ax.set_ylim(cy - half, cy + half)
+        else:
+            margin = 0.1 * max(max_x - min_x, max_y - min_y)
+            ax.set_xlim(min_x - margin, max_x + margin)
+            ax.set_ylim(min_y - margin, max_y + margin)
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+    plt.show()
+    return ax
