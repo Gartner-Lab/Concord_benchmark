@@ -236,35 +236,63 @@ def assign_broad_groups(
 # ----------------------------------------------------------------------
 # 2)  quick plot
 # ----------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+#  plot_lineage_graph   (palette-aware)
+# --------------------------------------------------------------------------- #
 def plot_lineage_graph(
     G: nx.DiGraph,
-    node2group: dict,
-    save_path=None,
-    figsize=(12, 2),
-    dpi=600,
+    node2group: dict[str, str | None],
+    *,
+    figsize: tuple[int, int] = (12, 2),
+    palette: str | Sequence[str] | dict[str, str] = "tab20",
+    dpi: int = 600,
+    save_path: str | Path | None = None,
 ):
     """
-    Draw the graph with colours by broad group.
-    Un-grouped nodes ⇒ grey (un-mapped) or black (mapped).
-    Requires graphviz layout (`pip install pygraphviz`).
+    Visualise the lineage tree coloured by *node2group*.
+
+    Parameters
+    ----------
+    palette
+        • str         → any Matplotlib colormap name  
+        • sequence    → list/tuple of colour hex-codes / names  
+        • dict        → explicit ``{group: colour}`` mapping
     """
-    # unique, sorted defined groups
+
+    # 1 ── determine palette --------------------------------------------------
     groups = sorted({g for g in node2group.values() if g is not None})
-    cmap   = cm.get_cmap("tab20", len(groups))
-    group2colour = {g: cmap(i) for i, g in enumerate(groups)}
 
-    # build final colours
-    colours = []
+    if isinstance(palette, dict):
+        group2colour = palette.copy()
+        # auto-assign colours for any group not in the dict
+        missing = [g for g in groups if g not in group2colour]
+        if missing:
+            cmap = cm.get_cmap("tab20", len(missing))
+            group2colour.update({g: cmap(i) for i, g in enumerate(missing)})
+    else:
+        # palette is str or sequence  → build a colormap iterator
+        if isinstance(palette, str):
+            cmap = cm.get_cmap(palette, len(groups))
+            colours = [cmap(i) for i in range(len(groups))]
+        else:                           # assume list / tuple of colours
+            colours = list(palette)
+            if len(colours) < len(groups):
+                # repeat colours if too few
+                colours *= int(np.ceil(len(groups) / len(colours)))
+        group2colour = dict(zip(groups, colours))
+
+    # 2 ── node colours -------------------------------------------------------
+    node_colours = []
     for n in G.nodes():
-        g  = node2group[n]
-        ok = G.nodes[n].get("mapped", False)
-        if g is not None and ok:
-            colours.append(group2colour[g])
+        grp = node2group.get(n)
+        mapped = G.nodes[n].get("mapped", False)
+        if grp is not None and mapped:
+            node_colours.append(group2colour.get(grp, "lightgrey"))
         else:
-            colours.append("black" if ok else "lightgrey")
+            node_colours.append("black" if mapped else "lightgrey")
 
-    # layout & draw
-    pos = nx.nx_agraph.graphviz_layout(G, prog="dot")
+    # 3 ── layout + draw ------------------------------------------------------
+    pos = nx.nx_agraph.graphviz_layout(G, prog="dot")   # needs pygraphviz
     plt.figure(figsize=figsize, dpi=dpi)
     nx.draw(
         G, pos,
@@ -273,11 +301,11 @@ def plot_lineage_graph(
         font_size=4,
         arrowsize=4,
         width=0.4,
-        node_color=colours,
+        node_color=node_colours,
     )
     plt.title("Lineage tree with broad-group colouring")
     if save_path:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches="tight")
     plt.show()
 
 
@@ -392,7 +420,7 @@ def build_lineage_graph(
     if plot and node2group:
         plot_lineage_graph(G, node2group, save_path=plot_path)
 
-    return G, tbl
+    return G, tbl, node2group
 
 
 # -----------------------------------------------------------------------------#
@@ -785,7 +813,7 @@ def geodesic_distance_matrix(
     import scanpy as sc
     import numpy as np
     import scipy.sparse.csgraph as csgraph
-
+    
     # ------------------------------------------------------------------ 1 · graph
     if conn_key is None:
         tmp_key = f"_nn_{n_neighbors}"
@@ -890,6 +918,72 @@ def embedding_distance_matrix(
     return (D, lin_nodes) if return_labels else D
 
 
+# --------------------------------------------------------------------------- #
+#  embedded_tree_distance_matrix                                              #
+# --------------------------------------------------------------------------- #
+def embedded_tree_distance_matrix(
+    G: nx.Graph,
+    adata,
+    *,
+    emb_key: str,
+    rep_attr: str = "medoid",
+    metric: str = "euclidean",
+    return_labels: bool = True,
+):
+    """
+    Distance between lineage nodes measured **along the lineage tree** but
+    ignoring (“skipping over”) any internal node that has *no* coordinate.
+
+    The path A–B–C–D therefore contributes
+
+        ‖x_A – x_C‖ + ‖x_C – x_D‖
+
+    when B is unmapped.
+
+    Only endpoints that *do* have a coordinate are included in the final
+    matrix.
+    """
+    # ---- 1 · collect coordinates -----------------------------------------
+    coords = {}                # node → vector
+    for n, data in G.nodes(data=True):
+        val = data.get(rep_attr, None)
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            continue
+        if np.isscalar(val) and np.equal(np.mod(val, 1), 0):
+            coords[n] = adata.obsm[emb_key][int(val)]
+        else:
+            coords[n] = np.asarray(val, float)
+
+    mapped_nodes = sorted(coords.keys())
+    if not mapped_nodes:
+        raise ValueError(f"No node carries coordinates via '{rep_attr}'")
+
+    idx = {n: i for i, n in enumerate(mapped_nodes)}
+    L   = len(mapped_nodes)
+    D   = np.full((L, L), np.nan)
+
+    # distance helper
+    _dist = lambda a, b: cdist([a], [b], metric=metric)[0, 0]
+
+    # ---- 2 · pairwise path compression ------------------------------------
+    for i, src in enumerate(mapped_nodes):
+        for j, tgt in enumerate(mapped_nodes[i + 1 :], start=i + 1):
+            G_undirected = G.to_undirected(as_view=True)
+            path = nx.shortest_path(G_undirected, src, tgt)      # unique in a tree
+            acc, prev = 0.0, src
+
+            # skip endpoints (start from 1, stop at -1)
+            for node in path[1:]:
+                if node not in coords:                # unmapped → ignore
+                    continue
+                acc += _dist(coords[prev], coords[node])
+                prev = node
+            D[i, j] = D[j, i] = acc
+
+    np.fill_diagonal(D, 0.0)
+    return (D, mapped_nodes) if return_labels else D
+
+
 
 def pairwise_lineage_distances(
     G,
@@ -938,12 +1032,21 @@ def pairwise_lineage_distances(
         D, nodes = geodesic_distance_matrix(
             G, adata,
             conn_key=conn_key,
+            rep_attr=rep_attr,
             rep_key=rep_key or emb_key,   # same notion as Scanpy
             n_neighbors=n_neighbors,
             directed=directed,
             hop_weight=(m == "hop"),
         )
-
+    elif m == "tree_geodesic":
+        if emb_key is None:
+            raise ValueError("emb_key required for tree-embedded distance")
+        D, nodes = embedded_tree_distance_matrix(
+            G, adata,
+            emb_key=emb_key,
+            rep_attr=rep_attr,
+            metric="euclidean",      # or expose via a kwarg if you like
+        )
     else:
         raise ValueError("mode must be euclidean, cosine, geodesic or hop")
 
@@ -1144,7 +1247,11 @@ def plot_lineage_paths(
     adata_lineage_key: str = "lineage_complete",
     adata_celltype_key: str = "cell_type",
     # ─────────  appearance  ───────── #
-    cmap_name: str = "tab20",
+    palette: str | Sequence[str] | dict[str, str] = "tab20",
+    marker_size: int = 2,
+    marker_edgewidth: float = 0.1,
+    marker_alpha: float = 0.8,
+    line_width: float = 0.4,
     dpi: int = 600,
     figsize: tuple[int, int] = (4, 4),
     plot_label: bool = False,
@@ -1157,59 +1264,40 @@ def plot_lineage_paths(
     save_path: str | Path | None = None,
 ):
     """
-    Draw rooted lineage paths on a 2-D embedding.
+    Draw lineage paths on a 2-D embedding.
 
-    Two modes
-    =========
-    • *single panel*  (default) – all paths in one axis  
-    • *multi-panel*  (set ``multi_panel=True``) – one small subplot per
-      broad lineage group (grid controlled by ``n_cols``).  Groups listed
-      in ``exclude_groups`` are skipped.
-
-    Parameters
-    ----------
-    adata : AnnData
-        Must contain the UMAP/embedding in ``adata.obsm[basis]`` and the
-        lineage / cell-type columns in ``adata.obs``.
-    G : nx.DiGraph
-        Lineage graph whose nodes carry the annotation lists.
-    paths, path_labels
-        Usually produced by ``get_root_leaf_paths`` and ``label_paths``.
-    basis : str
-        Key in ``adata.obsm`` containing a 2-D embedding (UMAP, t-SNE …).
-    *_key : str
-        Where to find lineage or cell-type annotations on *G* and *adata*.
-    multi_panel : bool
-        If True, make a grid of subplots (one per lineage group).
-    n_cols : int
-        Number of columns in the subplot grid (multi-panel only).
-    exclude_groups : list[str]
-        Optional list of group labels to drop from multi-panel output.
-    save_path : Path | str | None
-        If given, the figure is written there.
-
-    Notes
-    -----
-    • Relies on helper functions ``parse_annotation`` and
-      ``get_representative_point`` defined elsewhere in *lineage_helpers.py*.
-    • Uses a medoid (3-nearest, max 2k points) to place each internal node.
+    *palette* accepts
+        • a Matplotlib colormap name (str) — e.g. "tab20", "viridis" …  
+        • a sequence of colours — list/tuple of hex codes / colour names  
+        • a dict {group: colour} for explicit mapping
     """
 
     exclude_groups = set(exclude_groups or [])
-
-    # ------------------------------------------------------------------ theme #
     uniq_groups = sorted({g for g in path_labels if g not in exclude_groups})
-    cmap = cm.get_cmap(cmap_name, len(uniq_groups))
-    group2color = {g: cmap(i) for i, g in enumerate(uniq_groups)}
 
-    # cache background coords once
+    # ── resolve palette → {group: colour} -----------------------------------
+    if isinstance(palette, dict):
+        group2color = palette.copy()
+        missing = [g for g in uniq_groups if g not in group2color]
+        if missing:
+            cmap = cm.get_cmap("tab20", len(missing))
+            group2color.update({g: cmap(i) for i, g in enumerate(missing)})
+    else:
+        if isinstance(palette, str):
+            cmap = cm.get_cmap(palette, len(uniq_groups))
+            colours = [cmap(i) for i in range(len(uniq_groups))]
+        else:  # sequence
+            colours = list(palette)
+            if len(colours) < len(uniq_groups):
+                colours *= int(np.ceil(len(uniq_groups) / len(colours)))
+        group2color = dict(zip(uniq_groups, colours))
+
+    # background points cached once
     bg_x, bg_y = adata.obsm[basis][:, 0], adata.obsm[basis][:, 1]
 
-    # .........................................................................#
+    # ── helper to draw a single path ----------------------------------------
     def _draw_one_path(ax, path, *, color):
-        """Render a single path on *ax*."""
         rep_pts, node_labels = [], []
-
         for node in path:
             attrs = G.nodes[node]
             lin = parse_annotation(attrs.get(G_lineage_key))
@@ -1217,96 +1305,69 @@ def plot_lineage_paths(
 
             if lin:
                 mask = adata.obs[adata_lineage_key].isin(lin)
-                sel  = lin
+                sel = lin
             elif ct:
                 mask = adata.obs[adata_celltype_key].isin(ct)
-                sel  = ct
+                sel = ct
             else:
-                rep_pts.append([np.nan, np.nan])
-                node_labels.append((node, []))
-                continue
+                rep_pts.append([np.nan, np.nan]); node_labels.append((node, [])); continue
 
             idx = np.where(mask)[0]
             if idx.size == 0:
-                rep_pts.append([np.nan, np.nan])
-                node_labels.append((node, []))
+                rep_pts.append([np.nan, np.nan]); node_labels.append((node, []))
             else:
                 coords = adata.obsm[basis][idx]
-                rp = get_representative_point(coords,
-                                              method="medoid",
-                                              max_n_medoid=2000,
-                                              k_top=3,
-                                              jitter=0,
-                                              seed=seed)
-                rep_pts.append(rp)
-                node_labels.append((node, sel))
+                rp = get_representative_point(coords, method="medoid",
+                                              max_n_medoid=2000, k_top=3,
+                                              jitter=0, seed=seed)
+                rep_pts.append(rp); node_labels.append((node, sel))
 
         rep_pts = np.asarray(rep_pts)
-        valid   = ~np.isnan(rep_pts[:, 0])
+        valid = ~np.isnan(rep_pts[:, 0])
         if valid.any():
             ax.plot(rep_pts[valid, 0], rep_pts[valid, 1],
-                    color=color, marker="o", markersize=3,
-                    markeredgecolor="black", markeredgewidth=0.1,
-                    linewidth=0.4, alpha=0.8, zorder=1)
-
+                    color=color, marker="o", markersize=marker_size,
+                    markeredgecolor="black", markeredgewidth=marker_edgewidth,
+                    linewidth=line_width, alpha=marker_alpha, zorder=1)
             if plot_label:
-                for (x, y), (node_name, annot) in zip(
-                        rep_pts[valid],
-                        [node_labels[i] for i in np.where(valid)[0]]):
-                    ax.text(x, y, f"{node_name}\n{annot}",
-                            fontsize=2, color="black", alpha=0.5)
+                for (x, y), (name, ann) in zip(rep_pts[valid],
+                                               [node_labels[i] for i in np.where(valid)[0]]):
+                    ax.text(x, y, f"{name}\n{ann}", fontsize=2, color="black", alpha=0.5)
 
-    # ----------------------------------------------------------------- layout #
+    # ── layout --------------------------------------------------------------
     if multi_panel:
         if not uniq_groups:
             raise ValueError("No groups to plot (all excluded?)")
 
         n_rows = int(np.ceil(len(uniq_groups) / n_cols))
-        fig, axes = plt.subplots(
-            n_rows, n_cols,
-            figsize=(2 * n_cols, 2 * n_rows),
-            dpi=dpi
-        )
+        fig, axes = plt.subplots(n_rows, n_cols,
+                                 figsize=(2 * n_cols, 2 * n_rows), dpi=dpi)
         axes = axes.flatten()
 
-        for ax_idx, grp in enumerate(uniq_groups):
-            ax = axes[ax_idx]
-            ax.scatter(bg_x, bg_y,
-                       s=0.1, color="lightgray", alpha=0.5,
+        for i, grp in enumerate(uniq_groups):
+            ax = axes[i]
+            ax.scatter(bg_x, bg_y, s=0.1, color="lightgray", alpha=0.5,
                        edgecolors="none", rasterized=True, zorder=0)
-
             for p, lbl in zip(paths, path_labels):
                 if lbl == grp:
                     _draw_one_path(ax, p, color=group2color[grp])
-
             ax.set_title(grp, fontsize=10)
-            ax.set_xticks([]); ax.set_yticks([])
-            ax.set_xlabel(""); ax.set_ylabel("")
-
-        # turn off unused slots
-        for ix in range(len(uniq_groups), len(axes)):
-            axes[ix].axis("off")
-
+            ax.set_xticks([]); ax.set_yticks([]); ax.set_xlabel(""); ax.set_ylabel("")
+        for j in range(len(uniq_groups), len(axes)):
+            axes[j].axis("off")
         plt.tight_layout()
     else:
-        # --------------------------- single-panel ---------------------------- #
         plt.figure(figsize=figsize, dpi=dpi)
-        plt.scatter(bg_x, bg_y,
-                    s=0.1, color="lightgray", alpha=0.4,
+        plt.scatter(bg_x, bg_y, s=0.1, color="lightgray", alpha=0.4,
                     edgecolors="none", rasterized=True, zorder=0)
-
         for p, lbl in zip(paths, path_labels):
             _draw_one_path(plt.gca(), p, color=group2color[lbl])
+        plt.title(f"Lineage paths on {basis}", fontsize=8)
+        plt.xticks([]); plt.yticks([]); plt.xlabel(""); plt.ylabel("")
 
-        plt.title(f"Lineage paths on {basis}", fontsize=12)
-        plt.xticks([]); plt.yticks([])
-        plt.xlabel(""); plt.ylabel("")
-
-    # -------------------------------- save/show ----------------------------- #
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")
     plt.show()
-
 
 
 
@@ -1514,70 +1575,86 @@ def plot_lineage_distance_boxplot(
 
     return ax
 
-
 # --------------------------------------------------------------------------- #
-#  lineage_correlation_boxplot  (with significance bars)
+#  lineage_correlation_boxplot  (stratified-by-generation option)
 # --------------------------------------------------------------------------- #
 def lineage_correlation_boxplot(
     correlation_dict: dict[str, pd.DataFrame],
     *,
-    show_keys: list[str] | None = None,           # subset / order
-    reference_method: str | None = None,          # draw MW-U stars vs this
-    figsize: tuple[float, float] = (2.2, 1.2),
+    # ───────── which data to show ───────── #
+    show_keys: list[str] | None = None,
+    sort: bool = True,                  # sort by median correlation
+    generation_range: tuple[int, int] | None = None,   # (min, max) → per-gen grid
+    reference_method: str | None = None,               # MW-U stars vs this
+    # ───────── appearance ───────── #
     palette: str = "RdBu",
-    custom_rc: dict | None = None,
+    figsize_single: tuple[float, float] = (2.2, 1.2),
+    n_cols: int = 4,                                   # grid for per-gen mode
     flier_marker_size: float = 0.5,
-    title: str = "Spearman Correlation between\nlineage and latent distance",
+    title: str = "Spearman correlation\n(lineage ↔ latent distance)",
+    custom_rc: dict | None = None,
+    # ───────── misc ───────── #
     save_path: str | Path | None = None,
     return_data: bool = False,
 ):
     """
-    Horizontal box-plot of lineage-level Spearman correlations.
+    Compare lineage–wise Spearman correlations across embeddings.
 
-    If *reference_method* is supplied, every other method is compared to it
-    with a two-sided Mann-Whitney-U test and the significance level is drawn
-    as stars on the right margin.
+    • Default: single horizontal box-plot (all generations pooled).  
+    • Pass *generation_range=(g_min, g_max)* → grid of subplots
+      (one box-plot per generation).
 
-    Stars:
-        **** p ≤ 1e-4
-        ***  p ≤ 1e-3
-        **   p ≤ 1e-2
-        *    p ≤ 0.05
+    Significance (Mann-Whitney-U) stars are always drawn **within each
+    generation** (or once, if pooled) against *reference_method*.
+
+    Stars: **** ≤1e-4, *** ≤1e-3, ** ≤1e-2, * ≤0.05
     """
     import matplotlib.pyplot as plt
     import seaborn as sns
     import scipy.stats as stats
-    import numpy as np
     import contextlib
+    import numpy as np
+    import pandas as pd
 
-    # 1 ─ combine & subset ---------------------------------------------------
+    # ── 0 · input -----------------------------------------------------------
     if show_keys is None:
         show_keys = list(correlation_dict.keys())
 
-    df_combined = pd.concat(
+    df_all = pd.concat(
         [correlation_dict[m].assign(method=m) for m in show_keys],
         ignore_index=True
     ).dropna(subset=["spearman_corr"])
 
-    # 2 ─ order by median ----------------------------------------------------
-    med = df_combined.groupby("method")["spearman_corr"].median()
-    sorted_methods = med.sort_values(ascending=False).index.tolist()
+    if generation_range:
+        g_min, g_max = generation_range
+        df_all = df_all[df_all["generation"].between(g_min, g_max)]
 
-    # 3 ─ palette ------------------------------------------------------------
+    generations = sorted(df_all["generation"].unique())  # after filtering
+
+    # ── 1 · colour palette --------------------------------------------------
+    med_global = df_all.groupby("method")["spearman_corr"].median()
+    if sort:
+        sorted_methods = med_global.sort_values(ascending=False).index.tolist()
+    else:
+        sorted_methods = list(med_global.index)
+
     colors = sns.color_palette(palette, len(sorted_methods))
     method_color = {m: colors[i] for i, m in enumerate(sorted_methods)}
 
     flierprops = dict(marker="o", markersize=flier_marker_size,
                       markerfacecolor="black", linestyle="none")
 
-    # 4 ─ plotting -----------------------------------------------------------
-    rc_ctx = plt.rc_context(rc=custom_rc) if custom_rc else contextlib.nullcontext()
-    with rc_ctx:
-        fig, ax = plt.subplots(figsize=figsize, dpi=600)
+    # ── 2 · helper to draw ONE box-plot axis --------------------------------
+    def _draw_one(ax, df_gen: pd.DataFrame, title_suffix: str = "", 
+                override_order=None,
+                override_palette=None) -> None:
+        med = df_gen.groupby("method")["spearman_corr"].median()
+        order = override_order or sorted_methods
+        pal   = override_palette or method_color
         sns.boxplot(
             y="method", x="spearman_corr",
-            data=df_combined,
-            palette=method_color,
+            data=df_gen,
+            palette=pal,
             width=0.7, linewidth=0.5,
             order=sorted_methods,
             flierprops=flierprops,
@@ -1586,16 +1663,17 @@ def lineage_correlation_boxplot(
         for spine in ax.spines.values():
             spine.set_linewidth(0.5)
 
-        # annotate medians
+        # median labels
         for i, m in enumerate(sorted_methods):
-            ax.text(med[m] + 0.02, i, f"{med[m]:.2f}",
-                    ha="left", va="center", fontsize=6)
+            if m in med:
+                ax.text(med[m] + 0.02, i, f"{med[m]:.2f}",
+                        ha="left", va="center", fontsize=6)
 
-        # 5 ─ significance vs reference -------------------------------------
+        # MW-U stars vs reference
         if reference_method and reference_method in sorted_methods:
-            ref_vals = df_combined[df_combined["method"] == reference_method]["spearman_corr"]
-            ref_idx  = sorted_methods.index(reference_method)
-            x_offset = df_combined["spearman_corr"].max() + 0.05
+            ref_vals = df_gen[df_gen["method"] == reference_method]["spearman_corr"]
+            ref_idx = sorted_methods.index(reference_method)
+            x_off = df_gen["spearman_corr"].max() + 0.05
 
             def stars(p):
                 return "****" if p <= 1e-4 else \
@@ -1606,38 +1684,912 @@ def lineage_correlation_boxplot(
             for m in sorted_methods:
                 if m == reference_method:
                     continue
-                test_vals = df_combined[df_combined["method"] == m]["spearman_corr"]
-                stat, p = stats.mannwhitneyu(ref_vals, test_vals, alternative="two-sided")
+                test_vals = df_gen[df_gen["method"] == m]["spearman_corr"]
+                if test_vals.empty:
+                    continue
+                _, p = stats.mannwhitneyu(ref_vals, test_vals,
+                                          alternative="two-sided")
                 sig = stars(p)
                 if not sig:
                     continue
-
                 test_idx = sorted_methods.index(m)
-                # vertical line
-                ax.plot([x_offset, x_offset],
-                        [ref_idx, test_idx],
+                ax.plot([x_off, x_off], [ref_idx, test_idx],
                         color="black", linewidth=0.5)
-                # horizontal cap
-                ax.plot([x_offset, x_offset + 0.05],
-                        [test_idx, test_idx],
+                ax.plot([x_off, x_off + 0.05], [test_idx, test_idx],
                         color="black", linewidth=0.5)
-                # star label
-                ax.text(x_offset + 0.07, (ref_idx + test_idx) / 2,
+                ax.text(x_off + 0.07, (ref_idx + test_idx)/2,
                         sig, fontsize=7, ha="left", va="center")
 
-        ax.set(
-            xlabel="",
-            ylabel="",
-            title=title,
-        )
+        ax.set(xlabel="", ylabel="")
         ax.tick_params(axis="x", labelsize=6)
         ax.tick_params(axis="y", labelsize=7)
+        ax.set_title(title_suffix, fontsize=8)
 
-        plt.tight_layout()
+    # ── 3 · plotting --------------------------------------------------------
+    rc_ctx = plt.rc_context(rc=custom_rc) if custom_rc else contextlib.nullcontext()
+    with rc_ctx:
+        if generation_range:
+            # ----- grid of subplots, one per generation --------------------
+            n_cols = min(n_cols, len(generations))
+            n_rows = int(np.ceil(len(generations) / n_cols))
+            fig, axes = plt.subplots(n_rows, n_cols,
+                                     figsize=(figsize_single[0]*n_cols,
+                                              figsize_single[1]*n_rows),
+                                     dpi=600, sharex=False, sharey=True)
+            axes = np.array(axes).reshape(-1)
+            for ax, gen in zip(axes, generations):
+                df_g = df_all[df_all["generation"] == gen]
+
+                # --- build a palette specific to THIS generation ----------------------
+                med_g = df_g.groupby("method")["spearman_corr"].median()
+                methods_g = med_g.sort_values(ascending=False).index.tolist()
+
+                cols_g = sns.color_palette(palette, len(methods_g))
+                palette_g = {m: cols_g[i] for i, m in enumerate(methods_g)}
+
+                _draw_one(ax, df_g, f"Gen {gen}", override_order=methods_g, override_palette=palette_g)
+            for ax in axes[len(generations):]:
+                ax.axis("off")
+            fig.suptitle(title, y=1.02, fontsize=9)
+            plt.tight_layout()
+        else:
+            # ----- pooled single plot -------------------------------------
+            fig, ax = plt.subplots(figsize=figsize_single, dpi=600)
+            _draw_one(ax, df_all, "")
+            ax.set_title(title, fontsize=8)
+            plt.tight_layout()
+
         if save_path:
             fig.savefig(save_path, bbox_inches="tight")
         plt.show()
 
     if return_data:
-        return ax, df_combined
+        return (ax if generation_range is None else axes), df_all
+
+
+
+
+# --------------------------------------------------------------------------- #
+#  0 · utilities                                                              #
+# --------------------------------------------------------------------------- #
+def _iter_trim(subg: nx.DiGraph, trim_roots: list[str]) -> None:
+    """Remove *each* root plus all its descendants (in-place)."""
+    for r in trim_roots:
+        subg.remove_nodes_from(nx.descendants(subg, r) | {r})
+
+
+# --------------------------------------------------------------------------- #
+#  1 · extract_subgraph                                                       #
+# --------------------------------------------------------------------------- #
+def extract_subgraph(
+    G: nx.DiGraph,
+    roots: list[str],
+    trim: list[str] | None = None,
+) -> nx.DiGraph:
+    """
+    Return the induced sub-tree that contains *roots* and **all** their
+    descendants and, optionally, drop entire branches given in *trim*.
+    """
+    keep: set[str] = set()
+    for r in roots:
+        keep.update(nx.descendants(G, r))
+        keep.add(r)
+
+    subg = G.subgraph(keep).copy()
+    if trim:
+        _iter_trim(subg, trim)
+    return subg
+
+
+# --------------------------------------------------------------------------- #
+#  2 · palette_from_lin_or_ct                                                 #
+# --------------------------------------------------------------------------- #
+def palette_from_lin_or_ct(adata, subg, pal="Set1") -> dict[str, str]:
+    """
+    Build a colour mapping for every ``lin_or_ct`` value that occurs in *subg*.
+
+    Returns
+    -------
+    node2colour : dict[node -> colour]
+    """
+    import seaborn as sns
+
+    # collect all lin_or_ct strings
+    lin_ct = []
+    for n in subg.nodes():
+        lin_ct.extend(subg.nodes[n].get("linorct", []))
+    lin_ct = sorted(set(lin_ct))
+
+    # make palette with seaborn
+    cols = sns.color_palette(pal, len(lin_ct))
+    lut  = dict(zip(lin_ct, cols))
+
+    node2colour = {}
+    for n in subg.nodes():
+        annot = subg.nodes[n].get("linorct", [])
+        node2colour[n] = lut.get(annot[0], "lightgrey") if annot else "lightgrey"
+    return node2colour
+
+
+# --------------------------------------------------------------------------- #
+#  3 · draw_lineage_tree                                                      #
+# --------------------------------------------------------------------------- #
+def draw_lineage_tree(
+    subg: nx.DiGraph,
+    node2colour: dict[str, str],
+    *,
+    show_ct: bool = True,
+    figsize=(1.8, 0.7),
+    dpi=600,
+    save_path: str | Path | None = None,
+    title: str | None = None,
+):
+    """Convenience wrapper around NetworkX + graphviz layout."""
+    # --- labels ------------------------------------------------------------
+    if show_ct:
+        labels = {}
+        for n in subg.nodes():
+            ct = subg.nodes[n].get("celltype_annot", [])
+            ct_txt = ",".join(ct) if ct else ""
+            labels[n] = f"{n}/{ct_txt}" if ct_txt else n
+    else:
+        labels = {n: n for n in subg.nodes()}
+
+    pos = nx.nx_agraph.graphviz_layout(subg, prog="dot", args="-Grankdir=LR")
+    nlist = list(subg.nodes())
+    colours = [node2colour[n] for n in nlist]
+
+    plt.figure(figsize=figsize, dpi=dpi)
+    nx.draw(
+        subg, pos,
+        nodelist=nlist,
+        node_color=colours,
+        labels=labels,
+        node_size=15,
+        font_size=5,
+        arrowsize=4,
+        width=0.5,
+    )
+    if title:
+        plt.title(title, fontsize=7)
+    if save_path:
+        plt.savefig(save_path, bbox_inches="tight")
+    plt.show()
+
+
+# --------------------------------------------------------------------------- #
+#  4 · plot_paths_on_embedding                                                #
+# --------------------------------------------------------------------------- #
+def plot_paths_on_embedding(
+    adata,
+    subg: nx.DiGraph,
+    paths: list[list[str]],
+    *,
+    basis_umap: str,
+    palette_lin_or_ct: dict[str, str],
+    plot_labels: bool = False,
+    zoom: bool = False,
+    square: bool = False,
+    figsize=(2, 2),
+    dpi=600,
+    save_path: str | Path | None = None,
+):
+    """
+    Draw *paths* (each is a list of node IDs) on a 2-D embedding stored in
+    ``adata.obsm[basis_umap]`` and colour the vertices by *palette_lin_or_ct*.
+    """
+    # ---- background -------------------------------------------------------
+    # ---------- background -------------------------------------------------
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.scatter(*adata.obsm[basis_umap].T, s=0.1, color="lightgray",
+               alpha=0.8, edgecolors="none", rasterized=True, zorder=0)
+
+    mask = adata.obs["lin_or_ct"].isin(palette_lin_or_ct)
+    ax.scatter(*adata.obsm[basis_umap][mask].T,
+            c=adata.obs.loc[mask, "lin_or_ct"]
+                .map(palette_lin_or_ct)
+                .fillna("lightgrey")
+                .values,
+            s=0.3, alpha=0.8, edgecolors="none",
+            rasterized=True, zorder=1)
+
+    # ---------- draw every path -------------------------------------------
+    all_pts = []                              # ← collect every node position
+    for path in paths:
+        pts = []
+        for n in path:
+            annot = subg.nodes[n].get("linorct")
+            if not annot:
+                continue
+            mask   = adata.obs["lin_or_ct"].isin(annot)
+            coords = adata.obsm[basis_umap][mask]
+            if coords.size == 0:
+                continue
+            pts.append(
+                get_representative_point(coords, method="medoid",
+                                         max_n_medoid=2000, k_top=10)
+            )
+
+        pts = np.asarray(pts)
+        if pts.size == 0:
+            continue
+        all_pts.append(pts)                  # ← keep a copy for zooming
+        ax.plot(pts[:, 0], pts[:, 1],
+                color="black", linewidth=0.3,
+                marker="o", markersize=3,
+                markerfacecolor="white",
+                markeredgewidth=0.2, zorder=2)
+
+        if plot_labels:
+            for (x, y), n in zip(pts, path):
+                ax.text(x, y, n, fontsize=2, alpha=0.5)
+
+    # ---------- optional zoom ----------------------------------------------
+    if zoom and all_pts:
+        stacked = np.vstack(all_pts)
+        min_x, min_y = stacked.min(0)
+        max_x, max_y = stacked.max(0)
+        margin = 0.1 * max(max_x - min_x, max_y - min_y)
+        if square:
+            side  = max(max_x - min_x, max_y - min_y) + 2 * margin
+            cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
+            ax.set_xlim(cx - side/2, cx + side/2)
+            ax.set_ylim(cy - side/2, cy + side/2)
+        else:
+            ax.set_xlim(min_x - margin, max_x + margin)
+            ax.set_ylim(min_y - margin, max_y + margin)
+
+    ax.set_xticks([]); ax.set_yticks([])
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+    plt.show()
+
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers reused from earlier messages (keep them once in your module)
+# ──────────────────────────────────────────────────────────────────────────────
+import numpy as np
+import pandas as pd
+import networkx as nx
+from typing import Dict, Iterable, Optional, Sequence, Tuple
+from sklearn.neighbors import NearestNeighbors
+import seaborn as sns
+import matplotlib.pyplot as plt
+import contextlib
+
+def build_cell_to_nodes(G: nx.DiGraph) -> Dict[int, list[str]]:
+    """Collect all lineage nodes each cell maps to (no tie-breaking)."""
+    cell_to_nodes: Dict[int, list[str]] = {}
+    for n, data in G.nodes(data=True):
+        for i in data.get("cells", []) or []:
+            lst = cell_to_nodes.setdefault(int(i), [])
+            if n not in lst:
+                lst.append(n)
+    return cell_to_nodes
+
+def lineage_hop_lookup(
+    G: nx.DiGraph,
+    mapped_nodes: Optional[Iterable[str]] = None,
+    *,
+    undirected: bool = True,
+) -> Dict[str, Dict[str, int]]:
+    """dist[u][v] = hop distance on the lineage tree."""
+    H = G.to_undirected(as_view=True) if undirected else G
+    if mapped_nodes is None:
+        mapped_nodes = list(G.nodes)
+    mapped_nodes = [n for n in mapped_nodes if n in G]
+    dist = {}
+    for u in mapped_nodes:
+        d = nx.single_source_shortest_path_length(H, u)
+        dist[u] = {v: d[v] for v in mapped_nodes if v in d}
+    return dist
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 1) Per-embedding evaluation (returns per-anchor rows)
+# ──────────────────────────────────────────────────────────────────────────────
+def evaluate_embedding_vs_lineage_knn(
+    adata,
+    G: nx.DiGraph,
+    *,
+    emb_key: str,
+    k_list: Sequence[int] = (30, 100, 300),
+    n_anchors: Optional[int] = 1000,
+    random_state: int = 0,
+    metric: str = "euclidean",
+    use_faiss: bool = False,               # set True if you wire in your FAISS class
+    missing_policy: str = "skip",          # "skip" | "nan" | "max"
+    undirected_tree: bool = True,
+    cell_to_nodes: Optional[Dict[int, list[str]]] = None,
+) -> pd.DataFrame:
+    """
+    For each anchor cell, take its kNN in adata.obsm[emb_key] and compute:
+      • mean_hop  – mean of min-hop to each neighbor (lower is better)
+      • purity    – fraction of neighbors with hop == 0
+      • frac_mapped – neighbors with a computable hop / k
+
+    Multiple lineage mappings per cell are supported: hop(anchor, nb) is
+    min_{u in nodes(anchor), v in nodes(nb)} hop(u, v).
+    """
+    # ---------- 1) mappings / lineage distances ------------------------------
+    if cell_to_nodes is None:
+        cell_to_nodes = build_cell_to_nodes(G)
+    mapped_nodes = sorted({n for nodes in cell_to_nodes.values() for n in nodes})
+    dist_lookup = lineage_hop_lookup(G, mapped_nodes, undirected=undirected_tree)
+
+    if missing_policy == "max":
+        finite = [d for u in dist_lookup for d in dist_lookup[u].values()]
+        max_hop = max(finite) if finite else np.nan
+
+    # ---------- 2) kNN engine (sklearn by default) ---------------------------
+    X = adata.obsm[emb_key]
+    n = X.shape[0]
+
+    get_knn = None
+    if use_faiss:
+        try:
+            # plug in your FAISS Neighborhood here if desired
+            from concord.model import Neighborhood
+            eng = Neighborhood(X, k=max(k_list), use_faiss=True, metric=metric)
+            def get_knn(i, k):
+                return eng.get_knn(np.asarray([i]), k=k, include_self=False)[0]
+        except Exception:
+            get_knn = None
+
+    if get_knn is None:
+        nbrs = NearestNeighbors(n_neighbors=max(k_list)+1, metric=metric).fit(X)
+        def get_knn(i, k):
+            _, ind = nbrs.kneighbors(X[i:i+1], n_neighbors=k+1)
+            return ind[0][1:(k+1)]
+
+    # ---------- 3) anchors ---------------------------------------------------
+    rng = np.random.default_rng(random_state)
+    anchors = np.arange(n) if (n_anchors is None or n_anchors >= n) else rng.choice(n, size=n_anchors, replace=False)
+
+    # ---------- 4) compute per-anchor stats ---------------------------------
+    rows = []
+    for k in k_list:
+        for a in anchors:
+            A = cell_to_nodes.get(int(a), [])
+            if not A:  # anchor unmapped
+                rows.append(dict(anchor=a, k=k, mean_hop=np.nan, purity=np.nan,
+                                 n_used=0, frac_mapped=0.0))
+                continue
+
+            neigh = get_knn(int(a), k)
+            hop_list = []
+            mapped_ct = 0
+
+            for b in neigh:
+                B = cell_to_nodes.get(int(b), [])
+                if not B:
+                    if missing_policy == "skip":
+                        continue
+                    elif missing_policy == "nan":
+                        hop_list.append(np.nan)
+                    elif missing_policy == "max":
+                        hop_list.append(max_hop)
+                    continue
+
+                # min hop over all mapped-node pairs
+                best = np.inf
+                du = dist_lookup.get  # small speed-up
+                for u in A:
+                    d_u = du(u, {})
+                    for v in B:
+                        d = d_u.get(v, np.nan)
+                        if not np.isnan(d) and d < best:
+                            best = d
+                if np.isinf(best):
+                    if missing_policy == "skip":
+                        continue
+                    elif missing_policy == "nan":
+                        hop_list.append(np.nan)
+                    elif missing_policy == "max":
+                        hop_list.append(max_hop)
+                else:
+                    hop_list.append(best)
+                    mapped_ct += 1
+
+            hops = np.asarray(hop_list, float)
+            used_mask = np.isfinite(hops)
+            used = hops[used_mask]
+            mean_hop = np.nan if used.size == 0 else used.mean()
+            purity   = np.nan if used.size == 0 else (used == 0).mean()
+            frac_mapped = mapped_ct / float(k) if k > 0 else np.nan
+
+            rows.append(dict(anchor=a, k=k,
+                             mean_hop=mean_hop, purity=purity,
+                             n_used=int(used.size), frac_mapped=frac_mapped))
+
+    return pd.DataFrame(rows)
+
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2) Run across multiple embeddings / methods
+# ──────────────────────────────────────────────────────────────────────────────
+def knn_lineage_quality_across_methods(
+    adata,
+    G: nx.DiGraph,
+    emb_keys: Sequence[str],
+    *,
+    k_list: Sequence[int] = (30, 100, 300),
+    n_anchors: Optional[int] = 1000,
+    random_state: int = 0,
+    metric: str = "euclidean",
+    use_faiss: bool = False,
+    missing_policy: str = "skip",
+    undirected_tree: bool = True,
+) -> pd.DataFrame:
+    """
+    Returns a tidy DataFrame with columns:
+        method · k · anchor · mean_hop · purity · n_used · frac_mapped
+    """
+    # Build once and reuse across methods
+    cell_to_nodes = build_cell_to_nodes(G)
+
+    dfs = []
+    for m in emb_keys:
+        print(f"Evaluating {m} ...")
+        df = evaluate_embedding_vs_lineage_knn(
+            adata, G,
+            emb_key=m,
+            k_list=k_list,
+            n_anchors=n_anchors,
+            random_state=random_state,
+            metric=metric,
+            use_faiss=use_faiss,
+            missing_policy=missing_policy,
+            undirected_tree=undirected_tree,
+            cell_to_nodes=cell_to_nodes,   # reuse mapping
+        )
+        df["method"] = m
+        dfs.append(df)
+    return pd.concat(dfs, ignore_index=True)
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3) Boxplots across methods & k (purity and/or mean_hop)
+# ──────────────────────────────────────────────────────────────────────────────
+def plot_knn_lineage_quality_single(
+    df: pd.DataFrame,
+    *,
+    metric: str = "purity",                 # e.g. "purity" or "mean_hop"
+    facet_by_k: bool = True,
+    order_methods: Optional[Sequence[str]] = None,
+    palette: str = "tab10",
+    figsize: Tuple[float, float] = (6, 2.2),
+    custom_rc: Optional[dict] = None,
+    save_path: Optional[str] = None,
+    # --- new options for y-limit capping ---
+    y_cap_quantile: Optional[float] = None,   # e.g. 95 → cap at 95th percentile
+    y_cap_expand: float = 1.03,               # add headroom above the cap
+    y_cap_per_k: bool = False,                # per-facet cap when facet_by_k=True
+) -> Union[plt.Axes, List[plt.Axes]]:
+    """
+    Boxplots of a single KNN-lineage metric across methods and k.
+
+    If `y_cap_quantile` is provided, the y-axis top is capped at the chosen
+    percentile (global or per-k when faceting), multiplied by `y_cap_expand`.
+
+    Returns
+    -------
+    Axes (if facet_by_k=False) or list[Axes] (if facet_by_k=True)
+    """
+    if metric not in df.columns:
+        raise ValueError(f"'{metric}' not found in df columns.")
+
+    # keep only necessary cols and drop NaNs for the target metric
+    need_cols = ["method", "k", metric]
+    missing = [c for c in need_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in df: {missing}")
+    dfp = df[need_cols].dropna(subset=[metric]).copy()
+
+    # decide order of methods:
+    #   larger is better for 'purity', smaller is better for 'mean_hop'
+    if order_methods is None:
+        asc = (metric == "mean_hop")
+        med = dfp.groupby("method")[metric].median().sort_values(ascending=asc)
+        order_methods = med.index.tolist()
+
+    _rc = {
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "svg.fonttype": "none",
+        "text.usetex": False,
+    }
+    if custom_rc:
+        _rc.update(custom_rc)
+
+    rc_ctx = plt.rc_context(rc=_rc)
+    with rc_ctx:
+        if facet_by_k:
+            # one column per k
+            g = sns.catplot(
+                data=dfp,
+                kind="box",
+                x="method", y=metric,
+                col="k",
+                order=order_methods,
+                palette=palette,
+                sharey=True,             # same scale across k for this metric
+                width=0.7, fliersize=0.5,
+                height=figsize[1],
+                aspect=max(
+                    0.5,
+                    figsize[0] / (len(np.unique(dfp["k"])) * figsize[1] + 1e-9)
+                ),
+            )
+            # cosmetics
+            for ax in g.axes.flat:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(0.5)
+                ax.tick_params(axis="x", rotation=60, labelsize=8)
+                ax.tick_params(axis="y", labelsize=8)
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+            g.set_titles(col_template="k = {col_name}")
+
+            # ---- optional y-cap ----
+            if y_cap_quantile is not None:
+                if y_cap_per_k:
+                    # cap each facet using the subset for that k
+                    for ax, kval in zip(g.axes.flat, g.col_names):
+                        vals = dfp.loc[dfp["k"] == kval, metric].to_numpy()
+                        if np.isfinite(vals).any():
+                            p = np.nanpercentile(vals, y_cap_quantile)
+                            ax.set_ylim(top=p * y_cap_expand)
+                else:
+                    # global cap from all values of this metric
+                    vals = dfp[metric].to_numpy()
+                    if np.isfinite(vals).any():
+                        p = np.nanpercentile(vals, y_cap_quantile)
+                        for ax in g.axes.flat:
+                            ax.set_ylim(top=p * y_cap_expand)
+
+            plt.tight_layout()
+            if save_path:
+                g.savefig(save_path, bbox_inches="tight", dpi=600)
+            return list(g.axes.flat)
+
+        else:
+            # one axis, hue by k
+            fig, ax = plt.subplots(figsize=figsize, dpi=600)
+            sns.boxplot(
+                data=dfp,
+                x="method", y=metric, hue="k",
+                order=order_methods,
+                palette=palette,
+                width=0.7, fliersize=0.5,
+                ax=ax,
+            )
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.5)
+            ax.tick_params(axis="x", rotation=60, labelsize=8)
+            ax.tick_params(axis="y", labelsize=8)
+            ax.set(xlabel="", ylabel="")
+
+            # ---- optional y-cap (single axis) ----
+            if y_cap_quantile is not None:
+                vals = dfp[metric].to_numpy()
+                if np.isfinite(vals).any():
+                    p = np.nanpercentile(vals, y_cap_quantile)
+                    ax.set_ylim(top=p * y_cap_expand)
+
+            plt.tight_layout()
+            if save_path:
+                fig.savefig(save_path, bbox_inches="tight", dpi=600)
+            return ax
+        
+
+
+
+
+import numpy as np
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from pathlib import Path
+from typing import Sequence, Callable, Optional, Tuple, List, Dict
+
+# You already have these in your helpers:
+# from lineage_helpers import parse_annotation, get_representative_point
+
+
+# -----------------------------------------------------------------------------#
+#  Helpers
+# -----------------------------------------------------------------------------#
+
+def _resolve_palette(groups: Sequence[str],
+                     palette: str | Sequence[str] | Dict[str, str],
+                     fallback_cmap: str = "tab20") -> Dict[str, str]:
+    """
+    Turn a palette spec into a {group: colour} dict.
+    """
+    groups = list(groups)
+    if isinstance(palette, dict):
+        # keep provided colours; supply any missing from a fallback cmap
+        mapping = dict(palette)
+        missing = [g for g in groups if g not in mapping]
+        if missing:
+            cmap = cm.get_cmap(fallback_cmap, len(missing))
+            mapping.update({g: cmap(i) for i, g in enumerate(missing)})
+        return mapping
+    elif isinstance(palette, str):
+        cmap = cm.get_cmap(palette, len(groups))
+        return {g: cmap(i) for i, g in enumerate(groups)}
+    else:
+        colours = list(palette)
+        if len(colours) < len(groups):
+            # repeat if not enough
+            rep = int(np.ceil(len(groups) / len(colours)))
+            colours = (colours * rep)[:len(groups)]
+        return dict(zip(groups, colours))
+
+
+def extract_subgraph(G: nx.DiGraph,
+                     roots: Sequence[str],
+                     trim: Optional[Sequence[str]] = None) -> nx.DiGraph:
+    """
+    Subgraph containing all descendants of the provided `roots` (and the roots).
+    Optionally trim by removing a node and all its descendants.
+    """
+    keep: set[str] = set()
+    for r in roots:
+        if r not in G:
+            continue
+        des = nx.descendants(G, r)
+        des.add(r)
+        keep.update(des)
+    subg = G.subgraph(keep).copy()
+
+    if trim:
+        for t in trim:
+            if t in subg:
+                subg.remove_nodes_from(list(nx.descendants(subg, t)) + [t])
+    return subg
+
+
+def build_root_to_leaf_paths(G: nx.DiGraph,
+                             roots: Sequence[str]) -> List[List[str]]:
+    """
+    All root→leaf simple paths that exist in `G`.
+    """
+    leafs = [n for n in G.nodes if G.out_degree(n) == 0]
+    paths = []
+    for r in roots:
+        for l in leafs:
+            if nx.has_path(G, r, l):
+                paths.append(nx.shortest_path(G, r, l))
+    return paths
+
+
+
+
+def plot_lineage_paths_from_roots(
+    adata,
+    G: nx.DiGraph,
+    *,
+    roots: Sequence[str],
+    trim: Optional[Sequence[str]] = None,
+    basis: str = "Concord-decoder_UMAP",
+    adata_lineage_key: str = "lin_or_ct",  # adata.obs key for lineage/celltype
+    bg_obs_key: str = "lin_or_ct",         # background colouring category
+    path_labeler: Optional[Callable[[str], str]] = None,
+    path_palette: str | Sequence[str] | Dict[str, str] = "tab20",
+    bg_palette: str | Sequence[str] | Dict[str, str] = "tab20",
+    bg_alpha: float = 0.5,
+    bg_point_size: float = 0.3,
+    marker_size: int = 3,
+    marker_edgewidth: float = 0.2,
+    marker_alpha: float = 0.8,
+    line_width: float = 0.3,
+    line_alpha: float = 0.7,
+    path_plot_labels: bool = False,
+    bg_plot_labels: bool = False,
+    zoom: bool = False,
+    square: bool = False,
+    figsize: Tuple[float, float] = (2, 2),
+    dpi: int = 600,
+    medoid_k_top: int = 10,
+    medoid_max_n: int = 2000,
+    seed: Optional[int] = None,
+    add_inferred_trajectory: bool = False,
+    neighborhood_cls=None,
+    knn_k: int = 30,
+    save_path: Optional[str | Path] = None,
+    # ── NEW: highlight controls ──────────────────────────────────────────────
+    highlight_paths: Optional[Sequence[Sequence[str]]] = None,
+    highlight_leaves: Optional[Sequence[str]] = None,
+    highlight_end_contains: Optional[Sequence[str]] = None,
+    highlight_start_in: Optional[Sequence[str]] = None,
+    highlight_style: Optional[Dict[str, Any]] = None,
+    **kwargs
+):
+    """
+    Draw lineage paths on a 2-D embedding from given roots; optionally highlight
+    a subset of paths by leaf name, by end-node annotations, by start-node, or
+    by explicitly supplying paths.
+
+    Highlight rules (OR’ed):
+      • path ∈ highlight_paths
+      • path[-1] ∈ highlight_leaves
+      • any(token in end-node annotations) for token ∈ highlight_end_contains,
+        optionally gated by start node in highlight_start_in
+
+    highlight_style keys:
+      hi_line_color, hi_line_width, hi_line_alpha
+      lo_line_color, lo_line_width, lo_line_alpha
+    """
+    import matplotlib.colors as mcolors
+    from concord.plotting import plot_embedding
+
+    # ---- defaults for highlight styling
+    _hs = {
+        "hi_line_color": "black",
+        "hi_line_width": max(1.0, line_width),
+        "hi_line_alpha": max(0.7, line_alpha),
+        "lo_line_color": "lightgrey",
+        "lo_line_width": min(0.3, line_width),
+        "lo_line_alpha": min(0.5, line_alpha),
+    }
+    if highlight_style:
+        _hs.update(highlight_style)
+
+    highlight_paths = [list(p) for p in (highlight_paths or [])]
+    highlight_leaves = set(highlight_leaves or [])
+    end_tokens = list(highlight_end_contains or [])
+    start_whitelist = set(highlight_start_in or [])
+
+    # ---- subgraph & paths
+    subg = extract_subgraph(G, roots, trim=trim)
+    paths = build_root_to_leaf_paths(subg, roots)
+
+    # ---- background (plot all cells, colored by bg_obs_key)
+    fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
+    plot_embedding(
+        adata, basis, [bg_obs_key],
+        point_size=bg_point_size, alpha=bg_alpha,
+        legend_loc=("on data" if bg_plot_labels else None),
+        pal=bg_palette, ax=ax, **kwargs
+    )
+
+    # ---- group labels & colours
+    if path_labeler is None:
+        path_labeler = lambda leaf: leaf
+    path_groups = [path_labeler(p[-1]) for p in paths] if paths else []
+    uniq_groups = sorted(set(path_groups))
+    path_group2color = _resolve_palette(uniq_groups, path_palette, fallback_cmap="tab20")
+
+    # ---- helper to decide highlight
+    def _end_annotations(node: str) -> list[str]:
+        """Return the preferred end-node annotations for matching tokens."""
+        attrs = subg.nodes[node]
+        cand = parse_annotation(attrs.get("linorct"))
+        if cand:
+            return cand
+        lin = parse_annotation(attrs.get("lineage_annot"))
+        if lin:
+            return lin
+        ct = parse_annotation(attrs.get("celltype_annot"))
+        if ct:
+            return ct
+        return []
+
+    def _is_highlight(path: Sequence[str]) -> bool:
+        # explicit path
+        if any(list(path) == hp for hp in highlight_paths):
+            return True
+        # exact leaf match
+        if highlight_leaves and path[-1] in highlight_leaves:
+            # optionally gate by start node
+            return (not start_whitelist) or (path[0] in start_whitelist)
+        # end-node tokens
+        if end_tokens:
+            anns = _end_annotations(path[-1])
+            if any(tok in anns for tok in end_tokens):
+                return (not start_whitelist) or (path[0] in start_whitelist)
+        return False
+
+    # ---- draw each path using FULL adata for medoids
+    all_rep_points: list[np.ndarray] = []
+    for path, grp in zip(paths, path_groups):
+        rep_points, rep_idx, labels = [], [], []
+
+        for node in path:
+            attrs = subg.nodes[node]
+            # prefer linorct; fallback to lineage/celltype
+            cand = parse_annotation(attrs.get("linorct"))
+            if cand:
+                mask = adata.obs[adata_lineage_key].isin(cand) if adata_lineage_key in adata.obs else None
+            else:
+                lin = parse_annotation(attrs.get("lineage_annot"))
+                ct  = parse_annotation(attrs.get("celltype_annot"))
+                if lin and "lineage_complete" in adata.obs:
+                    mask = adata.obs["lineage_complete"].isin(lin); cand = lin
+                elif ct and "cell_type" in adata.obs:
+                    mask = adata.obs["cell_type"].isin(ct); cand = ct
+                else:
+                    mask = None
+
+            if mask is None or mask.sum() == 0:
+                rep_points.append([np.nan, np.nan]); labels.append((node, [])); continue
+
+            idx = np.where(mask.values if hasattr(mask, "values") else mask)[0]
+            coords = adata.obsm[basis][idx]
+            rp, j = get_representative_point(
+                coords, method="medoid",
+                max_n_medoid=medoid_max_n, k_top=medoid_k_top,
+                jitter=0, return_idx=True, seed=seed
+            )
+            rep_points.append(rp); rep_idx.append(idx[j]); labels.append((node, cand))
+
+        rep_points = np.asarray(rep_points)
+        valid = ~np.isnan(rep_points[:, 0])
+        if valid.sum() < 2:
+            continue
+        rep_points = rep_points[valid]
+        labels = [labels[i] for i, ok in enumerate(valid) if ok]
+        all_rep_points.append(rep_points)
+
+        # --- decide highlight & set styles
+        do_hi = _is_highlight(path)
+        line_col = mcolors.to_rgba(_hs["hi_line_color" if do_hi else "lo_line_color"],
+                                   alpha=_hs["hi_line_alpha" if do_hi else "lo_line_alpha"])
+        lw = _hs["hi_line_width" if do_hi else "lo_line_width"]
+        marker_face = mcolors.to_rgba(path_group2color.get(grp, "black"), alpha=marker_alpha)
+
+        # --- draw (line + markers with independent alpha)
+        ax.plot(rep_points[:, 0], rep_points[:, 1],
+                color=line_col, linewidth=lw, zorder=2)
+        ax.scatter(rep_points[:, 0], rep_points[:, 1],
+                   s=marker_size**2,
+                   facecolors=marker_face,
+                   edgecolors="black",
+                   linewidths=marker_edgewidth,
+                   zorder=3)
+
+        if path_plot_labels:
+            for (cx, cy), (name, ann) in zip(rep_points, labels):
+                ax.text(cx, cy, f"{name}\n{ann}", fontsize=2,
+                        color="black", zorder=4, alpha=0.5)
+
+        if add_inferred_trajectory and neighborhood_cls is not None and len(rep_idx) >= 2:
+            try:
+                neigh = neighborhood_cls(adata.obsm[basis], k=knn_k, use_faiss=False)
+                # Example (fill in your own trajectory helper if available):
+                # traj, _ = shortest_path_on_knn_graph(neigh, k=knn_k, point_a=rep_idx[0], point_b=rep_idx[-1], use_faiss=False)
+                # ax.plot(adata.obsm[basis][traj, 0], adata.obsm[basis][traj, 1],
+                #         color="black", linewidth=0.3, alpha=0.8, zorder=1)
+            except Exception:
+                pass
+
+    # ---- cosmetics & optional zoom
+    ax.set_xlabel(""); ax.set_ylabel("")
+    ax.set_xticks([]); ax.set_yticks([])
+    if zoom and all_rep_points:
+        all_pts = np.vstack(all_rep_points)
+        min_x, min_y = np.nanmin(all_pts, axis=0)
+        max_x, max_y = np.nanmax(all_pts, axis=0)
+        if square:
+            side = max(max_x - min_x, max_y - min_y)
+            margin = 0.1 * side
+            cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
+            half = side / 2 + margin
+            ax.set_xlim(cx - half, cx + half)
+            ax.set_ylim(cy - half, cy + half)
+        else:
+            margin = 0.1 * max(max_x - min_x, max_y - min_y)
+            ax.set_xlim(min_x - margin, max_x + margin)
+            ax.set_ylim(min_y - margin, max_y + margin)
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+    plt.show()
     return ax
