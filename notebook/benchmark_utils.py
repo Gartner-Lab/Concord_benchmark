@@ -311,7 +311,6 @@ def compute_umap_and_save(
     print(f"💾 Final AnnData saved to: {final_path}")
 
 
-
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -321,7 +320,8 @@ def plot_ranked_scores(
     score_dict: dict[str, pd.Series],
     figsize=(3, 0.5),
     custom_rc=None,
-    method_order: list[str] | None = None,
+    method_order: list[str] | None = None,     # kept for backward-compat
+    method_mapping: dict[str, str] | None = None,  # NEW: ordered mapping
     save_dir: Path | None = None,
     title: str = "Method Rankings",
     file_name: str = "ranked_scores_heatmap",
@@ -333,42 +333,42 @@ def plot_ranked_scores(
     Parameters
     ----------
     score_dict : dict
-        Keys are desired dataset names; values are Series of scores with method names as index.
-
-    figsize : tuple
-        Size of the heatmap (width, height).
-
-    custom_rc : dict
-        Optional matplotlib rcParams override (e.g., font settings).
-
-    save_dir : Path or None
-        If specified, saves the plot as a PDF in this directory.
-
-    file_name : str
-        Name of the saved file (default = 'ranked_scores_heatmap.pdf').
+        Keys are dataset names; values are Series of scores with method names as index.
+    method_mapping : dict or None
+        Ordered mapping {raw_method_name -> display_name}. If provided, it
+        *selects*, *orders*, and *renames* methods (in insertion order).
+        Takes precedence over `method_order`.
+    method_order : list or None
+        If provided (and `method_mapping` is None), selects and orders methods by raw names.
     """
-    # Combine scores
+    # ── 1) combine scores ───────────────────────────────────────────────────
     all_scores = pd.concat(score_dict.values(), axis=1)
     all_scores.columns = list(score_dict.keys())
 
-    # Compute rank
+    # ── 2) select/order/rename methods ──────────────────────────────────────
+    if method_mapping is not None:
+        # keep only methods present, in the mapping's order
+        available = [m for m in method_mapping if m in all_scores.index]
+        all_scores = all_scores.loc[available]
+        # rename to display names
+        rename_map = {m: method_mapping[m] for m in available}
+        all_scores = all_scores.rename(index=rename_map)
+    elif method_order is not None:
+        valid = [m for m in method_order if m in all_scores.index]
+        all_scores = all_scores.reindex(valid)
+
+    # ── 3) compute ranks (higher score = better = rank 1) ───────────────────
     ranked = all_scores.rank(axis=0, ascending=False).astype("Int64")
     heatmap_data = ranked.astype(float)
 
-    # Annotation
-    annot_text = heatmap_data.applymap(lambda val: str(int(val)) if pd.notna(val) else "-")
+    # ── 4) cell annotations ─────────────────────────────────────────────────
+    annot_text = heatmap_data.applymap(lambda v: str(int(v)) if pd.notna(v) else "-")
 
-    # Reorder methods if specified
-    if method_order is not None:
-        valid_methods = [m for m in method_order if m in heatmap_data.index]
-        heatmap_data = heatmap_data.reindex(valid_methods)
-        annot_text = annot_text.reindex(index=valid_methods)
-
-    # Colormap
+    # ── 5) colormap ─────────────────────────────────────────────────────────
     cmap = sns.color_palette("viridis_r", as_cmap=True)
     cmap.set_bad(color="lightgrey")
 
-    # Plot
+    # ── 6) plot ─────────────────────────────────────────────────────────────
     with plt.rc_context(rc=custom_rc or {}):
         plt.figure(figsize=figsize)
         ax = sns.heatmap(
@@ -380,13 +380,11 @@ def plot_ranked_scores(
             linecolor="white",
             cbar=False
         )
-
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=12, pad=10)
         plt.tight_layout()
-        
-        # Optional save
+
         if save_dir is not None:
             save_dir = Path(save_dir)
             save_dir.mkdir(parents=True, exist_ok=True)
@@ -395,75 +393,57 @@ def plot_ranked_scores(
 
         plt.show()
 
-
-
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import matplotlib as mpl
 
 def plot_resource_usage_heatmap(
     usage_df: pd.DataFrame,
     resource_type: str = "RAM",  # or "VRAM", "Time"
     figsize=(5, 2.5),
     custom_rc=None,
-    method_order: list[str] | None = None,
+    method_order: list[str] | None = None,          # kept for back-compat
+    method_mapping: dict[str, str] | None = None,   # NEW: ordered mapping
     save_dir: Path | None = None,
     title: str = "Resource Usage",
     file_name: str = "resource_usage_heatmap",
     save_format: str = "pdf",
     dataset_display_map: dict[str, str] | None = None,
+    *,
+    cmap: str | mpl.colors.Colormap = "Oranges",
+    vmax_val: float | None = None,
 ):
     """
     Plots a heatmap of resource usage (RAM, VRAM, or Time) across datasets and methods.
 
-    Parameters
-    ----------
-    usage_df : pd.DataFrame
-        DataFrame with methods as rows and datasets as columns.
-
-    resource_type : str
-        One of "RAM", "VRAM", or "Time".
-
-    figsize : tuple
-        Size of the heatmap (width, height).
-
-    custom_rc : dict
-        Optional matplotlib rcParams override (e.g., font settings).
-
-    method_order : list or None
-        If specified, reorders the method columns.
-
-    save_dir : Path or None
-        If specified, saves the plot to this directory.
-
-    file_name : str
-        Name of the saved file (without extension).
-
-    save_format : str
-        File format for saving (e.g., "pdf", "png", "svg").
-
-    dataset_display_map : dict or None
-        Optional mapping to rename datasets (index of heatmap).
-        If None, uses raw dataset names.
+    - If `method_mapping` is provided, it selects, orders, and renames methods
+      according to insertion order of the mapping.
+    - `cmap` can be a matplotlib colormap name or a Colormap object.
+    - For VRAM/RAM values are assumed MB; annotations are *always* shown in GB.
     """
 
+    # ── changed: always format memory in GB ─────────────────────────────────
     def format_val(val):
         if pd.isna(val):
-            return "-"
+            return "-"                      # show "-" for NaN
         if resource_type == "VRAM" and np.isclose(val, 0, atol=1e-3):
-            return ""
+            return ""                       # VRAM==0 → empty; "CPU" will be overlaid
         if resource_type in {"RAM", "VRAM"}:
-            return f"{val:.0f}M" if val < 1024 else f"{val / 1024:.1f}G"
+            gb = float(val) / 1024.0        # input assumed MB → GB
+            # one decimal precision looks clean; tweak if you want
+            return f"{gb:.1f}G"
         if resource_type == "Time":
             return f"{int(val // 3600)}h" if val >= 3600 else (
                    f"{int(val // 60)}m" if val >= 60 else f"{int(val)}s")
         return str(val)
+    # ───────────────────────────────────────────────────────────────────────
 
     annot_df = usage_df.applymap(format_val)
 
-    # Rename datasets if a display map is provided
+    # Rename datasets (rows after transpose)
     if dataset_display_map:
         heatmap_df = usage_df.T.rename(index=dataset_display_map)
         annot_df_renamed = annot_df.T.rename(index=dataset_display_map)
@@ -471,8 +451,23 @@ def plot_resource_usage_heatmap(
         heatmap_df = usage_df.T
         annot_df_renamed = annot_df.T
 
-    # Reorder method columns
-    if method_order is not None:
+    # ---- select/order/rename methods (columns) ----
+    if method_mapping is not None:
+        available = [m for m in method_mapping if m in heatmap_df.columns]
+        heatmap_df = heatmap_df[available]
+        annot_df_renamed = annot_df_renamed[available]
+
+        display_names = [method_mapping[m] for m in available]
+        counts = {}
+        unique_names = []
+        for name in display_names:
+            counts[name] = counts.get(name, 0) + 1
+            unique_names.append(f"{name} [{counts[name]}]" if counts[name] > 1 else name)
+
+        heatmap_df.columns = unique_names
+        annot_df_renamed.columns = unique_names
+
+    elif method_order is not None:
         valid_methods = [m for m in method_order if m in heatmap_df.columns]
         heatmap_df = heatmap_df[valid_methods]
         annot_df_renamed = annot_df_renamed[valid_methods]
@@ -484,9 +479,13 @@ def plot_resource_usage_heatmap(
     )
     nan_mask = heatmap_df.isna()
 
-    # Plotting
-    cmap = plt.get_cmap("Oranges")
-    cmap.set_bad(color="lightgrey")
+    # Colormap
+    cmap_obj = mpl.colormaps[cmap].copy() if isinstance(cmap, str) else cmap
+    if hasattr(cmap_obj, "set_bad"):
+        cmap_obj.set_bad(color="lightgrey")
+
+    # Color limits (still in MB for scaling)
+    vmin_val = 0 if resource_type in {"RAM", "VRAM"} else None
 
     with plt.rc_context(rc=custom_rc or {}):
         plt.figure(figsize=figsize)
@@ -494,7 +493,9 @@ def plot_resource_usage_heatmap(
             heatmap_df.astype(float),
             annot=annot_df_renamed,
             fmt="",
-            cmap=cmap,
+            cmap=cmap_obj,
+            vmin=vmin_val,
+            vmax=vmax_val,
             linewidths=1,
             linecolor="white",
             cbar=False,
@@ -506,14 +507,14 @@ def plot_resource_usage_heatmap(
                 if cpu_mask.loc[dataset, method]:
                     ax.text(
                         col_idx + 0.5, row_idx + 0.5,
-                        "CPU only", ha="center", va="center",
+                        "CPU", ha="center", va="center",
                         fontsize=7, color="black"
                     )
                 elif nan_mask.loc[dataset, method]:
                     ax.text(
                         col_idx + 0.5, row_idx + 0.5,
-                        "NaN", ha="center", va="center",
-                        fontsize=8, color="black"
+                        "-", ha="center", va="center",
+                        fontsize=9, color="black"
                     )
 
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")

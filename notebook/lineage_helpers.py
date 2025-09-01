@@ -2152,29 +2152,36 @@ def knn_lineage_quality_across_methods(
 
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 3) Boxplots across methods & k (purity and/or mean_hop)
-# ──────────────────────────────────────────────────────────────────────────────
 def plot_knn_lineage_quality_single(
     df: pd.DataFrame,
     *,
     metric: str = "purity",                 # e.g. "purity" or "mean_hop"
     facet_by_k: bool = True,
-    order_methods: Optional[Sequence[str]] = None,
-    palette: str = "tab10",
+    order_methods: Optional[Sequence[str]] = None,  # can be original or display names
+    palette: Union[str, Sequence, Dict[str, Any]] = "tab10",
     figsize: Tuple[float, float] = (6, 2.2),
     custom_rc: Optional[dict] = None,
     save_path: Optional[str] = None,
-    # --- new options for y-limit capping ---
+    # y-limit capping
     y_cap_quantile: Optional[float] = None,   # e.g. 95 → cap at 95th percentile
     y_cap_expand: float = 1.03,               # add headroom above the cap
     y_cap_per_k: bool = False,                # per-facet cap when facet_by_k=True
+    # style tweaks
+    alpha=0.8,
+    border_lw: float = 0.3,                   # thinner box/whisker/cap outlines
+    median_lw: float = 1.2,                   # thicker median line
+    median_color: str = "black",              # median line color
+    flier_alpha: float = 0.2,                 # more transparent outliers
+    flier_size: float = 0.8,                  # smaller outliers
+    # NEW: pretty label mapping
+    method_mapping: Optional[Dict[str, str]] = None,
 ) -> Union[plt.Axes, List[plt.Axes]]:
     """
     Boxplots of a single KNN-lineage metric across methods and k.
 
-    If `y_cap_quantile` is provided, the y-axis top is capped at the chosen
-    percentile (global or per-k when faceting), multiplied by `y_cap_expand`.
+    If `method_mapping` is provided, x-axis tick labels are mapped from the
+    original df['method'] to pretty display names. A dict palette keyed by
+    original names will be remapped to the display names automatically.
 
     Returns
     -------
@@ -2190,12 +2197,34 @@ def plot_knn_lineage_quality_single(
         raise ValueError(f"Missing columns in df: {missing}")
     dfp = df[need_cols].dropna(subset=[metric]).copy()
 
-    # decide order of methods:
-    #   larger is better for 'purity', smaller is better for 'mean_hop'
+    # ---------- mapping to display names ----------
+    if method_mapping:
+        dfp["method_display"] = dfp["method"].map(method_mapping).fillna(dfp["method"])
+    else:
+        dfp["method_display"] = dfp["method"]
+
+    # order: if user provides order, accept either original or display names
     if order_methods is None:
         asc = (metric == "mean_hop")
-        med = dfp.groupby("method")[metric].median().sort_values(ascending=asc)
-        order_methods = med.index.tolist()
+        # order by median on display names (safe even with mapping)
+        med = (dfp.groupby("method_display")[metric]
+                  .median()
+                  .sort_values(ascending=asc))
+        display_order = med.index.tolist()
+    else:
+        # map any provided original names → display names
+        if method_mapping:
+            display_order = [method_mapping.get(m, m) for m in order_methods]
+        else:
+            display_order = list(order_methods)
+
+    # remap dict palette keys from original → display (if needed)
+    pal_use = palette
+    if isinstance(palette, dict):
+        if method_mapping:
+            pal_use = {method_mapping.get(k, k): v for k, v in palette.items()}
+        else:
+            pal_use = palette
 
     _rc = {
         "pdf.fonttype": 42,
@@ -2206,26 +2235,39 @@ def plot_knn_lineage_quality_single(
     if custom_rc:
         _rc.update(custom_rc)
 
+    boxprops     = dict(linewidth=border_lw, alpha=alpha)
+    whiskerprops = dict(linewidth=border_lw)
+    capprops     = dict(linewidth=border_lw)
+    medianprops  = dict(linewidth=median_lw, color=median_color)
+
+    import matplotlib.colors as mcolors
+    flierprops = dict(
+        marker="o",
+        markersize=flier_size,
+        markerfacecolor=mcolors.to_rgba("black", flier_alpha),
+        markeredgecolor="none",
+    )
+
     rc_ctx = plt.rc_context(rc=_rc)
     with rc_ctx:
         if facet_by_k:
-            # one column per k
             g = sns.catplot(
                 data=dfp,
                 kind="box",
-                x="method", y=metric,
+                x="method_display", y=metric,
                 col="k",
-                order=order_methods,
-                palette=palette,
-                sharey=True,             # same scale across k for this metric
+                order=display_order,
+                palette=pal_use,
+                sharey=True,
                 width=0.7, fliersize=0.5,
                 height=figsize[1],
-                aspect=max(
-                    0.5,
-                    figsize[0] / (len(np.unique(dfp["k"])) * figsize[1] + 1e-9)
-                ),
+                aspect=max(0.5, figsize[0] / (len(np.unique(dfp["k"])) * figsize[1] + 1e-9)),
+                boxprops=boxprops,
+                whiskerprops=whiskerprops,
+                capprops=capprops,
+                medianprops=medianprops,
+                flierprops=flierprops,
             )
-            # cosmetics
             for ax in g.axes.flat:
                 for spine in ax.spines.values():
                     spine.set_linewidth(0.5)
@@ -2235,17 +2277,15 @@ def plot_knn_lineage_quality_single(
                 ax.set_ylabel("")
             g.set_titles(col_template="k = {col_name}")
 
-            # ---- optional y-cap ----
+            # optional y-cap
             if y_cap_quantile is not None:
                 if y_cap_per_k:
-                    # cap each facet using the subset for that k
                     for ax, kval in zip(g.axes.flat, g.col_names):
                         vals = dfp.loc[dfp["k"] == kval, metric].to_numpy()
                         if np.isfinite(vals).any():
                             p = np.nanpercentile(vals, y_cap_quantile)
                             ax.set_ylim(top=p * y_cap_expand)
                 else:
-                    # global cap from all values of this metric
                     vals = dfp[metric].to_numpy()
                     if np.isfinite(vals).any():
                         p = np.nanpercentile(vals, y_cap_quantile)
@@ -2258,15 +2298,19 @@ def plot_knn_lineage_quality_single(
             return list(g.axes.flat)
 
         else:
-            # one axis, hue by k
             fig, ax = plt.subplots(figsize=figsize, dpi=600)
             sns.boxplot(
                 data=dfp,
-                x="method", y=metric, hue="k",
-                order=order_methods,
-                palette=palette,
+                x="method_display", y=metric, hue="k",
+                order=display_order,
+                palette=pal_use,
                 width=0.7, fliersize=0.5,
                 ax=ax,
+                boxprops=boxprops,
+                whiskerprops=whiskerprops,
+                capprops=capprops,
+                medianprops=medianprops,
+                flierprops=flierprops,
             )
             for spine in ax.spines.values():
                 spine.set_linewidth(0.5)
@@ -2274,7 +2318,6 @@ def plot_knn_lineage_quality_single(
             ax.tick_params(axis="y", labelsize=8)
             ax.set(xlabel="", ylabel="")
 
-            # ---- optional y-cap (single axis) ----
             if y_cap_quantile is not None:
                 vals = dfp[metric].to_numpy()
                 if np.isfinite(vals).any():
@@ -2285,6 +2328,7 @@ def plot_knn_lineage_quality_single(
             if save_path:
                 fig.savefig(save_path, bbox_inches="tight", dpi=600)
             return ax
+
         
 
 
@@ -2371,7 +2415,6 @@ def build_root_to_leaf_paths(G: nx.DiGraph,
 
 
 
-
 def plot_lineage_paths_from_roots(
     adata,
     G: nx.DiGraph,
@@ -2379,8 +2422,8 @@ def plot_lineage_paths_from_roots(
     roots: Sequence[str],
     trim: Optional[Sequence[str]] = None,
     basis: str = "Concord-decoder_UMAP",
-    adata_lineage_key: str = "lin_or_ct",  # adata.obs key for lineage/celltype
-    bg_obs_key: str = "lin_or_ct",         # background colouring category
+    adata_lineage_key: str = "lin_or_ct",
+    bg_obs_key: str = "lin_or_ct",
     path_labeler: Optional[Callable[[str], str]] = None,
     path_palette: str | Sequence[str] | Dict[str, str] = "tab20",
     bg_palette: str | Sequence[str] | Dict[str, str] = "tab20",
@@ -2404,29 +2447,34 @@ def plot_lineage_paths_from_roots(
     neighborhood_cls=None,
     knn_k: int = 30,
     save_path: Optional[str | Path] = None,
-    # ── NEW: highlight controls ──────────────────────────────────────────────
+    # ── highlight controls ──────────────────────────────────────────────
     highlight_paths: Optional[Sequence[Sequence[str]]] = None,
     highlight_leaves: Optional[Sequence[str]] = None,
     highlight_end_contains: Optional[Sequence[str]] = None,
     highlight_start_in: Optional[Sequence[str]] = None,
     highlight_style: Optional[Dict[str, Any]] = None,
+    # ── NEW: pick exactly one highlighted path per (start, token) pair ─
+    highlight_one_per_start_token: bool = False,
+    pick_seed: Optional[int] = None,
     **kwargs
 ):
     """
-    Draw lineage paths on a 2-D embedding from given roots; optionally highlight
-    a subset of paths by leaf name, by end-node annotations, by start-node, or
-    by explicitly supplying paths.
+    Draw lineage paths on a 2-D embedding from given roots.
 
-    Highlight rules (OR’ed):
-      • path ∈ highlight_paths
-      • path[-1] ∈ highlight_leaves
-      • any(token in end-node annotations) for token ∈ highlight_end_contains,
-        optionally gated by start node in highlight_start_in
+    If `highlight_one_per_start_token=True`, then among all paths:
+      For each (start ∈ highlight_start_in, token ∈ highlight_end_contains),
+      select ONE path whose start==start and whose end-node annotations contain `token`,
+      and highlight exactly those selected paths. All other paths are drawn in the
+      lowlight style.
+
+    Otherwise, falls back to the usual highlight rules (explicit paths, leaf names,
+    end-node tokens ∧ optional start gate).
 
     highlight_style keys:
       hi_line_color, hi_line_width, hi_line_alpha
       lo_line_color, lo_line_width, lo_line_alpha
     """
+    import numpy as np
     import matplotlib.colors as mcolors
     from concord.plotting import plot_embedding
 
@@ -2442,16 +2490,20 @@ def plot_lineage_paths_from_roots(
     if highlight_style:
         _hs.update(highlight_style)
 
+    # normalise highlight inputs
     highlight_paths = [list(p) for p in (highlight_paths or [])]
     highlight_leaves = set(highlight_leaves or [])
     end_tokens = list(highlight_end_contains or [])
     start_whitelist = set(highlight_start_in or [])
 
-    # ---- subgraph & paths
+    # RNG for selecting one-per-pair
+    rng = np.random.default_rng(pick_seed if pick_seed is not None else seed)
+
+    # ---- subgraph & all paths
     subg = extract_subgraph(G, roots, trim=trim)
     paths = build_root_to_leaf_paths(subg, roots)
 
-    # ---- background (plot all cells, colored by bg_obs_key)
+    # ---- background
     fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi, constrained_layout=True)
     plot_embedding(
         adata, basis, [bg_obs_key],
@@ -2460,51 +2512,71 @@ def plot_lineage_paths_from_roots(
         pal=bg_palette, ax=ax, **kwargs
     )
 
-    # ---- group labels & colours
+    # ---- palette for groups (by leaf labeler)
     if path_labeler is None:
         path_labeler = lambda leaf: leaf
     path_groups = [path_labeler(p[-1]) for p in paths] if paths else []
     uniq_groups = sorted(set(path_groups))
     path_group2color = _resolve_palette(uniq_groups, path_palette, fallback_cmap="tab20")
 
-    # ---- helper to decide highlight
+    # ---- helper to read end annotations
     def _end_annotations(node: str) -> list[str]:
-        """Return the preferred end-node annotations for matching tokens."""
         attrs = subg.nodes[node]
         cand = parse_annotation(attrs.get("linorct"))
-        if cand:
-            return cand
+        if cand: return cand
         lin = parse_annotation(attrs.get("lineage_annot"))
-        if lin:
-            return lin
-        ct = parse_annotation(attrs.get("celltype_annot"))
-        if ct:
-            return ct
+        if lin: return lin
+        ct  = parse_annotation(attrs.get("celltype_annot"))
+        if ct:  return ct
         return []
 
-    def _is_highlight(path: Sequence[str]) -> bool:
-        # explicit path
+    # ---- choose highlighted set (one per (start, token))
+    selected_highlights: set[tuple] = set()
+    if highlight_one_per_start_token and start_whitelist and end_tokens:
+        # group candidate paths by (start, token)
+        by_pair: Dict[Tuple[str, str], list[list[str]]] = {}
+        for p in paths:
+            start = p[0]
+            if start not in start_whitelist:
+                continue
+            anns = _end_annotations(p[-1])
+            for tok in end_tokens:
+                if tok in anns:
+                    by_pair.setdefault((start, tok), []).append(p)
+
+        # for each pair, pick one path (avoid duplicates if possible)
+        already_taken: set[tuple] = set()
+        for pair, cands in by_pair.items():
+            if not cands:
+                continue
+            # prefer not to reuse the same path across pairs
+            remaining = [c for c in cands if tuple(c) not in already_taken]
+            pool = remaining if remaining else cands
+            chosen = pool[int(rng.integers(len(pool)))]
+            tup = tuple(chosen)
+            selected_highlights.add(tup)
+            already_taken.add(tup)
+
+    # ---- fallback per-path highlight rule (when not using one-per-pair mode)
+    def _is_highlight_default(path: Sequence[str]) -> bool:
         if any(list(path) == hp for hp in highlight_paths):
             return True
-        # exact leaf match
         if highlight_leaves and path[-1] in highlight_leaves:
-            # optionally gate by start node
             return (not start_whitelist) or (path[0] in start_whitelist)
-        # end-node tokens
         if end_tokens:
             anns = _end_annotations(path[-1])
             if any(tok in anns for tok in end_tokens):
                 return (not start_whitelist) or (path[0] in start_whitelist)
         return False
 
-    # ---- draw each path using FULL adata for medoids
+    # ---- draw each path
     all_rep_points: list[np.ndarray] = []
     for path, grp in zip(paths, path_groups):
         rep_points, rep_idx, labels = [], [], []
 
+        # compute medoid reps along the path
         for node in path:
             attrs = subg.nodes[node]
-            # prefer linorct; fallback to lineage/celltype
             cand = parse_annotation(attrs.get("linorct"))
             if cand:
                 mask = adata.obs[adata_lineage_key].isin(cand) if adata_lineage_key in adata.obs else None
@@ -2538,16 +2610,19 @@ def plot_lineage_paths_from_roots(
         labels = [labels[i] for i, ok in enumerate(valid) if ok]
         all_rep_points.append(rep_points)
 
-        # --- decide highlight & set styles
-        do_hi = _is_highlight(path)
+        # decide highlight status
+        if highlight_one_per_start_token and selected_highlights:
+            do_hi = (tuple(path) in selected_highlights)
+        else:
+            do_hi = _is_highlight_default(path)
+
         line_col = mcolors.to_rgba(_hs["hi_line_color" if do_hi else "lo_line_color"],
                                    alpha=_hs["hi_line_alpha" if do_hi else "lo_line_alpha"])
         lw = _hs["hi_line_width" if do_hi else "lo_line_width"]
         marker_face = mcolors.to_rgba(path_group2color.get(grp, "black"), alpha=marker_alpha)
 
-        # --- draw (line + markers with independent alpha)
-        ax.plot(rep_points[:, 0], rep_points[:, 1],
-                color=line_col, linewidth=lw, zorder=2)
+        # draw line + markers
+        ax.plot(rep_points[:, 0], rep_points[:, 1], color=line_col, linewidth=lw, zorder=2)
         ax.scatter(rep_points[:, 0], rep_points[:, 1],
                    s=marker_size**2,
                    facecolors=marker_face,
@@ -2563,14 +2638,11 @@ def plot_lineage_paths_from_roots(
         if add_inferred_trajectory and neighborhood_cls is not None and len(rep_idx) >= 2:
             try:
                 neigh = neighborhood_cls(adata.obsm[basis], k=knn_k, use_faiss=False)
-                # Example (fill in your own trajectory helper if available):
-                # traj, _ = shortest_path_on_knn_graph(neigh, k=knn_k, point_a=rep_idx[0], point_b=rep_idx[-1], use_faiss=False)
-                # ax.plot(adata.obsm[basis][traj, 0], adata.obsm[basis][traj, 1],
-                #         color="black", linewidth=0.3, alpha=0.8, zorder=1)
+                # hook for your KNN-trajectory util if you want
             except Exception:
                 pass
 
-    # ---- cosmetics & optional zoom
+    # cosmetics & zoom
     ax.set_xlabel(""); ax.set_ylabel("")
     ax.set_xticks([]); ax.set_yticks([])
     if zoom and all_rep_points:
