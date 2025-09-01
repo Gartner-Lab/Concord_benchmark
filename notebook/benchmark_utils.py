@@ -422,20 +422,24 @@ def plot_resource_usage_heatmap(
     - If `method_mapping` is provided, it selects, orders, and renames methods
       according to insertion order of the mapping.
     - `cmap` can be a matplotlib colormap name or a Colormap object.
-    - For VRAM/RAM the units are assumed MB; set `vmax_val` (in MB) to cap color scale.
+    - For VRAM/RAM values are assumed MB; annotations are *always* shown in GB.
     """
 
+    # ── changed: always format memory in GB ─────────────────────────────────
     def format_val(val):
         if pd.isna(val):
             return "-"                      # show "-" for NaN
         if resource_type == "VRAM" and np.isclose(val, 0, atol=1e-3):
             return ""                       # VRAM==0 → empty; "CPU" will be overlaid
         if resource_type in {"RAM", "VRAM"}:
-            return f"{val:.0f}M" if val < 1024 else f"{val / 1024:.1f}G"
+            gb = float(val) / 1024.0        # input assumed MB → GB
+            # one decimal precision looks clean; tweak if you want
+            return f"{gb:.1f}G"
         if resource_type == "Time":
             return f"{int(val // 3600)}h" if val >= 3600 else (
                    f"{int(val // 60)}m" if val >= 60 else f"{int(val)}s")
         return str(val)
+    # ───────────────────────────────────────────────────────────────────────
 
     annot_df = usage_df.applymap(format_val)
 
@@ -447,16 +451,13 @@ def plot_resource_usage_heatmap(
         heatmap_df = usage_df.T
         annot_df_renamed = annot_df.T
 
-    # ---- NEW: select/order/rename methods (columns) ----
+    # ---- select/order/rename methods (columns) ----
     if method_mapping is not None:
         available = [m for m in method_mapping if m in heatmap_df.columns]
         heatmap_df = heatmap_df[available]
         annot_df_renamed = annot_df_renamed[available]
 
-        # rename to display names
         display_names = [method_mapping[m] for m in available]
-
-        # ensure unique column labels (avoid ambiguity in `.loc[dataset, method]`)
         counts = {}
         unique_names = []
         for name in display_names:
@@ -483,7 +484,7 @@ def plot_resource_usage_heatmap(
     if hasattr(cmap_obj, "set_bad"):
         cmap_obj.set_bad(color="lightgrey")
 
-    # Color limits
+    # Color limits (still in MB for scaling)
     vmin_val = 0 if resource_type in {"RAM", "VRAM"} else None
 
     with plt.rc_context(rc=custom_rc or {}):
@@ -528,3 +529,4 @@ def plot_resource_usage_heatmap(
             plt.savefig(save_path, format=save_format)
 
         plt.show()
+
