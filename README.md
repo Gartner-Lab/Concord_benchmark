@@ -1,4 +1,4 @@
-# Benchmarking code for CONCORD 
+# Benchmarking code for the CONCORD framework
 
 This repository maintains the benchmarking analysis for CONCORD paper. 
 
